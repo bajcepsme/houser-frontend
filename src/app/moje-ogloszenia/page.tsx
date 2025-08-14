@@ -316,10 +316,10 @@ export default function MyListingsShowcasePage() {
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
             >
-              <option value="date_desc">Data ↓</option>
-              <option value="date_asc">Data ↑</option>
-              <option value="price_desc">Cena ↓</option>
-              <option value="price_asc">Cena ↑</option>
+              <option value="date_desc">Data1 ↓</option>
+              <option value="date_asc">Data2 ↑</option>
+              <option value="price_desc">Cena3 ↓</option>
+              <option value="price_asc">Cena4 ↑</option>
             </select>
           </div>
         </div>
