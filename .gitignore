@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Ignore Windows device names
+NUL
+PRN
+AUX
+CON
+COM1
+LPT1
