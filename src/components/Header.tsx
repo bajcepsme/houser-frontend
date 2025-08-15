@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import * as React from 'react';
-import { Plus, Menu, User, LogOut, Settings, List } from 'lucide-react';
+import { Plus, Menu, User, LogOut, Settings } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { toAbsoluteUrl } from '@/lib/url';
 
 function NavLink({ href, label }: { href: string; label: string }) {
   const path = usePathname();
@@ -24,39 +25,89 @@ function NavLink({ href, label }: { href: string; label: string }) {
   );
 }
 
+/** Estetyczny domyślny avatar (ciemne tło + sylwetka) jako inline SVG. */
+const DEFAULT_AVATAR_DARK =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#1f2937"/>
+          <stop offset="1" stop-color="#111827"/>
+        </linearGradient>
+      </defs>
+      <circle cx="48" cy="48" r="48" fill="url(#g)"/>
+      <circle cx="48" cy="38" r="16" fill="#e5e7eb"/>
+      <path d="M16 78c6-14 18-22 32-22s26 8 32 22" fill="#e5e7eb"/>
+    </svg>`
+  );
+
+/** Normalizacja ścieżki avatara do absolutnego URL. Obsługuje:
+ *  - absolutne http(s)
+ *  - data:/blob:
+ *  - "avatars/..." -> "/storage/avatars/..."
+ *  - "storage/..." oraz "/storage/..."
+ */
+function resolveAvatarSrc(raw?: string | null): string {
+  if (!raw || !raw.trim()) return DEFAULT_AVATAR_DARK;
+  let s = raw.trim();
+
+  // absolutne / data / blob
+  if (/^(data:|blob:|https?:\/\/)/i.test(s)) return s;
+
+  // usuń wiodące slashe, żeby unormować
+  s = s.replace(/^\/+/, '');
+
+  // avatar z dysku public
+  if (s.startsWith('avatars/')) s = `storage/${s}`;
+
+  // "storage/..." -> absolutny URL z API
+  return toAbsoluteUrl(`/${s}`);
+}
+
 function Avatar({
   name,
   photoUrl,
   size = 32,
+  cacheKey,
 }: {
   name?: string | null;
   photoUrl?: string | null;
   size?: number;
+  /** wartość do bustowania cache (np. updated_at) */
+  cacheKey?: string | number | null;
 }) {
-  const initials =
-    (name || '')
-      .split(' ')
-      .map((n) => n[0])
-      .slice(0, 2)
-      .join('') || 'U';
+  const [src, setSrc] = React.useState<string>(() => resolveAvatarSrc(photoUrl));
 
-  if (photoUrl) {
-    return (
-      <img
-        src={photoUrl}
-        alt={name || 'Użytkownik'}
-        className="rounded-full object-cover ring-1 ring-black/5"
-        style={{ width: size, height: size }}
-      />
-    );
-  }
+  React.useEffect(() => {
+    setSrc(resolveAvatarSrc(photoUrl));
+  }, [photoUrl]);
+
+  // Nie doklejaj cache-bustera do data:/blob:, bo to psuje URL
+  const isDataOrBlob = /^(data:|blob:)/i.test(src);
+  const needsBuster = !isDataOrBlob && (/^https?:\/\//i.test(src) || src.startsWith('/'));
+
+  const finalSrc = needsBuster && cacheKey != null
+    ? `${src}${src.includes('?') ? '&' : '?'}v=${encodeURIComponent(String(cacheKey))}`
+    : src;
+
+  // Tło:
+  // - dla defaultu (data:) dajemy przyjemne ciemne kółko (to jest w samym SVG),
+  // - dla własnego zdjęcia tło białe, żeby NIE było czarnego "prześwitu".
+  const isDefault = src.startsWith('data:');
+
   return (
-    <div
-      className="grid place-items-center rounded-full bg-gray-200 text-gray-700 font-semibold ring-1 ring-black/5"
+    <img
+      key={finalSrc} // re-mount po zmianie ścieżki
+      src={finalSrc}
+      alt={name || 'Użytkownik'}
+      className={[
+        'rounded-full object-cover ring-1 ring-black/5',
+        isDefault ? '' : 'bg-white', // własny avatar: jasne tło pod spodem
+      ].join(' ')}
       style={{ width: size, height: size }}
-    >
-      {initials}
-    </div>
+      onError={() => setSrc(DEFAULT_AVATAR_DARK)}
+    />
   );
 }
 
@@ -107,8 +158,15 @@ export default function Header() {
                 onClick={() => setOpen((o) => !o)}
                 className="group inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-2 py-1.5 pr-2.5 transition hover:bg-gray-50"
               >
-                <Avatar name={user?.name} photoUrl={(user as any)?.avatar} size={28} />
-                <span className="hidden text-sm text-gray-800 sm:inline">{user?.name || 'Konto'}</span>
+                <Avatar
+                  name={user?.name}
+                  photoUrl={(user as any)?.avatar}
+                  size={28}
+                  cacheKey={(user as any)?.updated_at || (user as any)?.avatar}
+                />
+                <span className="hidden text-sm text-gray-800 sm:inline">
+                  {user?.name || 'Konto'}
+                </span>
               </button>
 
               {open && (
@@ -141,15 +199,6 @@ export default function Header() {
                       }}
                     >
                       <Settings className="h-4 w-4" /> Ustawienia
-                    </button>
-                    <button
-                      className="dropdown-item inline-flex items-center gap-2 text-gray-800"
-                      onClick={() => {
-                        setOpen(false);
-                        router.push('/moje-ogloszenia');
-                      }}
-                    >
-                      <List className="h-4 w-4" /> Moje ogłoszenia
                     </button>
                     <div className="my-1 h-px bg-gray-100" />
                     <button

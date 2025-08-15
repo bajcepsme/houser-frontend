@@ -1,15 +1,18 @@
-export function toAbsoluteUrl(path?: string | null): string {
-  if (!path) return '';
+// BEZ new URL – 100% defensywnie
+export function toAbsoluteUrl(u?: string | null, opts?: { placeholder?: string }) {
+  const placeholder = opts?.placeholder ?? '';
+  if (!u || typeof u !== 'string') return placeholder;
 
-  // Jeśli ścieżka jest już pełnym URL-em — nic nie zmieniamy
-  if (/^https?:\/\//i.test(path)) {
-    return path;
-  }
+  // 1) jeśli już absolutny – zwróć
+  if (/^https?:\/\//i.test(u)) return u;
 
-  // Upewniamy się, że mamy hosta API
-  const base = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/+$/, '');
-  if (!base) return path;
+  // 2) odetnij leading slashe, ale zachowaj ścieżkę
+  const clean = u.replace(/^\/+/, '');
 
-  // Doklejamy ścieżkę, dbając o brak podwójnych ukośników
-  return `${base}/${path.replace(/^\/+/, '')}`;
+  // 3) baza z ENV (może być pusta – to OK)
+  const base = (process.env.NEXT_PUBLIC_API_URL ?? '').toString().replace(/\/+$/, '');
+
+  if (base) return `${base}/${clean}`;
+  // brak bazy? zwróć względny (Next poradzi sobie)
+  return `/${clean}`;
 }
