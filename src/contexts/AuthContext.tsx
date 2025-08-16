@@ -6,7 +6,9 @@ type User = {
   id: number;
   name?: string;
   email?: string;
-  // dodaj, jeśli chcesz więcej pól
+  avatar?: string | null;
+  updated_at?: string;
+  is_superadmin?: boolean; // <--- DODANE
 };
 
 type AuthContextType = {

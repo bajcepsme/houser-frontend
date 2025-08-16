@@ -143,7 +143,44 @@ const PLACEHOLDER = `data:image/svg+xml;utf8,${encodeURIComponent(`
 </svg>`)}`
 ;
 
+// === AVATAR: budowa poprawnego URL z wartości z bazy ===
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? '').trim().replace(/\/+$/, '');
 
+function avatarPathToUrl(val?: string | null) {
+  if (!val) return null;
+  const s = String(val).trim();
+  if (!s) return null;
+
+  // pełny adres lub data/blob → zwróć jak jest
+  if (/^(https?:|data:|blob:)/i.test(s)) return s;
+
+  // jeżeli w bazie jest "avatars/xxx.jpg" → serwujemy przez publiczny symlink /storage
+  if (/^avatars\//i.test(s)) return `${API_BASE}/storage/${s.replace(/^\/+/, '')}`;
+
+  // jeżeli już jest "storage/..." → tylko dolep API_BASE
+  if (/^storage\//i.test(s)) return `${API_BASE}/${s.replace(/^\/+/, '')}`;
+
+  // inne ścieżki względne – dolep bazę API
+  const path = s.replace(/^\/+/, '');
+  return API_BASE ? `${API_BASE}/${path}` : `/${path}`;
+}
+
+// elegancki default (gdy brak avatara)
+const DEFAULT_AVATAR =
+  `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2b2f39"/>
+      <stop offset="1" stop-color="#1f232b"/>
+    </linearGradient>
+  </defs>
+  <circle cx="128" cy="128" r="124" fill="url(#g)"/>
+  <circle cx="128" cy="128" r="124" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="8"/>
+  <circle cx="128" cy="104" r="36" fill="#e6e9ef"/>
+  <path d="M64 188c10-26 36-40 64-40s54 14 64 40v12H64z" fill="#cfd5df"/>
+</svg>
+`)}`;
 
 // === NOWE: walidacja i budowa absolutnego adresu ===
 function buildAbsoluteFromApi(pathLike: string) {
@@ -590,19 +627,27 @@ export default function MyListingsShowcasePage() {
   if (isLoading) return <main className="container-page py-10">Ładowanie…</main>;
   if (!user) return null;
 
-  const avatar = (user as any)?.avatar || null;
-  const role = (user as any)?.role || 'Osoba Prywatna';
-  const phone = (user as any)?.phone || (user as any)?.phone_number || '';
-  const email = user.email ?? '';
+  const avatarUrl = avatarPathToUrl((user as any)?.avatar || null);
+const role = (user as any)?.role || 'Osoba Prywatna';
+const phone = (user as any)?.phone || (user as any)?.phone_number || '';
+const email = user.email ?? '';
 
   return (
     <main className="container-page py-8 md:py-12 space-y-6">
       {/* HERO – gradient, wycentrowane */}
-      <section className="hero-gradient rounded-2xl ring-1 ring-gray-200/70 p-6 md:p-8 shadow-sm">
-        <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
-          <div className="relative w-24 h-24 rounded-2xl overflow-hidden bg-gray-100 ring-1 ring-black/5 shrink-0">
-           <Image src={imgSrc(avatar)} alt={user?.name || 'Avatar'} fill className="object-cover" />
-          </div>
+<section className="hero-gradient rounded-2xl ring-1 ring-gray-200/70 p-6 md:p-8 shadow-sm">
+  <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
+    {/* AVATAR */}
+    <div className="shrink-0">
+      <Image
+        src={avatarUrl || DEFAULT_AVATAR}
+        alt={user?.name || 'Avatar'}
+        width={96}                // 24 * 4 = 96px
+        height={96}
+        className="block object-cover rounded-full ring-1 ring-black/5"
+        priority
+      />
+    </div>
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">

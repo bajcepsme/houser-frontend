@@ -2676,3 +2676,15 @@ color: #333;
 .map-credit a:hover{ color:#334155;}
 
 .leaflet-touch .leaflet-bar {border:0!important}
+
+:root {
+  --brand-primary:  #1d4ed8; /* fallback */
+  --brand-secondary:#0ea5e9;
+  --brand-accent:   #f59e0b;
+  --brand-bg:       #ffffff;
+}
+
+/* Przykład powiązania istniejących klas */
+.btn-primary { background: var(--brand-primary); color: #fff; }
+.btn-primary:hover { filter: brightness(0.95); }
+/* jeśli masz inne komponenty – dowiąż podobnie */

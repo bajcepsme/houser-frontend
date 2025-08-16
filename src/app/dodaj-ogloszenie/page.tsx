@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { useAuth } from '@/contexts/AuthContext';
 import { NearbyPicker, MediaPicker } from './components/Amenities';
-
+import { useListingAbilities } from '@/hooks/useListingAbilities';
 import ImageUploader from '@/components/ImageUploader';
 import ListingPreview from './components/ListingPreview';
 import LocationPicker from './components/LocationPicker';

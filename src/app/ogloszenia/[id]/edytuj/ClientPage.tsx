@@ -10,7 +10,7 @@ import OfferTypeSelect from '@/app/dodaj-ogloszenie/components/OfferTypeSelect';
 import LocationPicker from '@/app/dodaj-ogloszenie/components/LocationPicker';
 import ImageUploader from '@/components/ImageUploader';
 import { NearbyPicker, MediaPicker } from '@/app/dodaj-ogloszenie/components/Amenities';
-
+import { useListingAbilities } from '@/hooks/useListingAbilities';
 
 
 /* ===== typy ===== */
@@ -145,6 +145,7 @@ export default function ClientPage({ id }: { id: string }) {
   const { user, isLoading } = useAuthGuard();
   const { token } = useAuth();
   const router = useRouter();
+  const { abilities, loading: abilitiesLoading } = useListingAbilities(id);
 
   const apiBase = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/+$/, '');
   const apiOrigin = apiBase ? new URL(apiBase).origin : '';
@@ -405,9 +406,9 @@ export default function ClientPage({ id }: { id: string }) {
     }
   };
 
-  if (isLoading || loading || !user) {
-    return <p className="p-8 text-center">Ładowanie…</p>;
-    }
+if (isLoading || loading || abilitiesLoading || !user) {
+  return <p className="p-8 text-center">Ładowanie…</p>;
+}
 
   return (
     <main className="py-6 md:py-8">
@@ -566,15 +567,17 @@ export default function ClientPage({ id }: { id: string }) {
                   <button onClick={goPreview} disabled={!canGoPreview} className="btn-ghost !py-2 !px-5">
                     Podgląd zmian
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleSave}
-                    disabled={!canSubmit}
-                    className="btn-primary !py-2 !px-5"
-                    title={!canSubmit ? 'Uzupełnij wymagane pola' : ''}
-                  >
-                    Zapisz zmiany
-                  </button>
+{abilities.update && (
+      <button
+        type="button"
+        onClick={handleSave}
+        disabled={!canSubmit}
+        className="btn-primary !py-2 !px-5"
+        title={!canSubmit ? 'Uzupełnij wymagane pola' : ''}
+      >
+        Zapisz zmiany
+      </button>
+    )}
                 </div>
               </div>
             </div>
