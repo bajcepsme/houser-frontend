@@ -1,109 +1,130 @@
+// src/contexts/AuthContext.tsx
 'use client';
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 type User = {
   id: number;
-  name?: string;
-  email?: string;
-  avatar?: string | null;
-  updated_at?: string;
-  is_superadmin?: boolean; // <--- DODANE
+  name: string;
+  email: string;
+  is_superadmin?: boolean;
+  [k: string]: any;
 };
 
 type AuthContextType = {
   user: User | null;
   token: string | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   token: null,
   isLoading: true,
-  login: async () => false,
+  login: async () => {},
   logout: () => {},
+  refreshUser: async () => {},
 });
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/+$/, '');
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const API = process.env.NEXT_PUBLIC_API_URL;
-
-  const fetchUser = async (tkn: string) => {
-    try {
-      const res = await fetch(`${API}/api/v1/user`, {
-        headers: {
-          Accept: 'application/json',
-          Authorization: `Bearer ${tkn}`,
-        },
-        cache: 'no-store',
-      });
-      if (!res.ok) throw new Error('401');
-      const data = await res.json();
-      setUser(data);
-      return true;
-    } catch {
-      setUser(null);
-      return false;
-    }
-  };
-
-  // 1) Start aplikacji: wczytaj token z localStorage i spróbuj pobrać /user
+  // przy starcie: wczytaj token z localStorage i spróbuj pobrać /api/v1/user
   useEffect(() => {
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('houser_token') : null;
-    if (saved) {
-      setToken(saved);
-      fetchUser(saved).finally(() => setIsLoading(false));
-    } else {
+    const t = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (!t) {
       setIsLoading(false);
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setToken(t);
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/user`, {
+          headers: { Authorization: `Bearer ${t}`, Accept: 'application/json' },
+          cache: 'no-store',
+        });
+        if (!res.ok) throw new Error('unauth');
+        const u = await res.json();
+        setUser(u);
+      } catch {
+        // token nieaktualny
+        localStorage.removeItem('token');
+        setToken(null);
+        setUser(null);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
   }, []);
 
-  // 2) Logowanie: zapisz token → pobierz usera
-  const login = async (email: string, password: string) => {
+  async function login(email: string, password: string) {
+    setIsLoading(true);
     try {
-      const res = await fetch(`${API}/api/v1/login`, {
+      const res = await fetch(`${API_BASE}/api/v1/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-      if (!res.ok) return false;
-
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try {
+          const j = await res.json();
+          if (j?.message) msg += `: ${j.message}`;
+        } catch {}
+        throw new Error(msg);
+      }
       const data = await res.json();
-      const tkn: string =
-        data.token || data.access_token || data.data?.token || data?.data?.access_token;
+      // BACKEND zwraca { user: {...}, token: "..." }
+      const t = data?.token as string | undefined;
+      const u = data?.user as User | undefined;
+      if (!t || !u) throw new Error('Brak tokena lub użytkownika w odpowiedzi API.');
 
-      if (!tkn) return false;
-
-      localStorage.setItem('houser_token', tkn);
-      setToken(tkn);
-
-      const ok = await fetchUser(tkn);
-      return ok;
-    } catch {
-      return false;
+      localStorage.setItem('token', t);
+      setToken(t);
+      setUser(u);
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }
 
-  // 3) Wylogowanie
-  const logout = () => {
-    localStorage.removeItem('houser_token');
+  function logout() {
+    localStorage.removeItem('token');
     setToken(null);
     setUser(null);
-  };
+  }
+
+  async function refreshUser() {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/user`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        setUser(await res.json());
+      } else if (res.status === 401) {
+        logout();
+      }
+    } catch {
+      // ignorujemy — pozostawiamy stan jak jest
+    }
+  }
 
   const value = useMemo(
-    () => ({ user, token, isLoading, login, logout }),
+    () => ({ user, token, isLoading, login, logout, refreshUser }),
     [user, token, isLoading]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
+}
 
-export const useAuth = () => useContext(AuthContext);
+export function useAuth() {
+  return useContext(AuthContext);
+}

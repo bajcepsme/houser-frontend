@@ -6,6 +6,7 @@ import * as React from 'react';
 import { Plus, Menu, User, LogOut, Settings } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toAbsoluteUrl } from '@/lib/url';
+import { loadBrandFromLocalStorage } from '@/lib/brand';
 
 function NavLink({ href, label }: { href: string; label: string }) {
   const path = usePathname();
@@ -25,43 +26,34 @@ function NavLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-/** Estetyczny domyślny avatar (ciemne tło + sylwetka) jako inline SVG. */
 const DEFAULT_AVATAR_DARK =
   'data:image/svg+xml;utf8,' +
   encodeURIComponent(
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
-      <defs>
-        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#1f2937"/>
-          <stop offset="1" stop-color="#111827"/>
-        </linearGradient>
-      </defs>
+      <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#1f2937"/><stop offset="1" stop-color="#111827"/>
+      </linearGradient></defs>
       <circle cx="48" cy="48" r="48" fill="url(#g)"/>
       <circle cx="48" cy="38" r="16" fill="#e5e7eb"/>
       <path d="M16 78c6-14 18-22 32-22s26 8 32 22" fill="#e5e7eb"/>
     </svg>`
   );
 
-/** Normalizacja ścieżki avatara do absolutnego URL. Obsługuje:
- *  - absolutne http(s)
- *  - data:/blob:
- *  - "avatars/..." -> "/storage/avatars/..."
- *  - "storage/..." oraz "/storage/..."
- */
+function resolveAssetSrc(raw?: string | null): string | null {
+  if (!raw || !raw.trim()) return null;
+  let s = raw.trim();
+  if (/^(data:|blob:|https?:\/\/)/i.test(s)) return s;
+  s = s.replace(/^\/+/, '');
+  if (s.startsWith('logos/')) s = `storage/${s}`;
+  return toAbsoluteUrl(`/${s}`);
+}
+
 function resolveAvatarSrc(raw?: string | null): string {
   if (!raw || !raw.trim()) return DEFAULT_AVATAR_DARK;
   let s = raw.trim();
-
-  // absolutne / data / blob
   if (/^(data:|blob:|https?:\/\/)/i.test(s)) return s;
-
-  // usuń wiodące slashe, żeby unormować
   s = s.replace(/^\/+/, '');
-
-  // avatar z dysku public
   if (s.startsWith('avatars/')) s = `storage/${s}`;
-
-  // "storage/..." -> absolutny URL z API
   return toAbsoluteUrl(`/${s}`);
 }
 
@@ -74,36 +66,34 @@ function Avatar({
   name?: string | null;
   photoUrl?: string | null;
   size?: number;
-  /** wartość do bustowania cache (np. updated_at) */
   cacheKey?: string | number | null;
 }) {
-  const [src, setSrc] = React.useState<string>(() => resolveAvatarSrc(photoUrl));
-
+  const [src, setSrc] = React.useState<string>(() =>
+    resolveAvatarSrc(photoUrl)
+  );
   React.useEffect(() => {
     setSrc(resolveAvatarSrc(photoUrl));
   }, [photoUrl]);
 
-  // Nie doklejaj cache-bustera do data:/blob:, bo to psuje URL
   const isDataOrBlob = /^(data:|blob:)/i.test(src);
-  const needsBuster = !isDataOrBlob && (/^https?:\/\//i.test(src) || src.startsWith('/'));
+  const needsBuster =
+    !isDataOrBlob && (/^https?:\/\//i.test(src) || src.startsWith('/'));
+  const finalSrc =
+    needsBuster && cacheKey != null
+      ? `${src}${src.includes('?') ? '&' : '?'}v=${encodeURIComponent(
+          String(cacheKey)
+        )}`
+      : src;
 
-  const finalSrc = needsBuster && cacheKey != null
-    ? `${src}${src.includes('?') ? '&' : '?'}v=${encodeURIComponent(String(cacheKey))}`
-    : src;
-
-  // Tło:
-  // - dla defaultu (data:) dajemy przyjemne ciemne kółko (to jest w samym SVG),
-  // - dla własnego zdjęcia tło białe, żeby NIE było czarnego "prześwitu".
   const isDefault = src.startsWith('data:');
-
   return (
     <img
-      key={finalSrc} // re-mount po zmianie ścieżki
+      key={finalSrc}
       src={finalSrc}
       alt={name || 'Użytkownik'}
       className={[
         'rounded-full object-cover ring-1 ring-black/5',
-        isDefault ? '' : 'bg-white', // własny avatar: jasne tło pod spodem
+        isDefault ? '' : 'bg-white',
       ].join(' ')}
       style={{ width: size, height: size }}
       onError={() => setSrc(DEFAULT_AVATAR_DARK)}
@@ -115,9 +105,28 @@ export default function Header() {
   const { user, logout } = useAuth();
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
+  const [brand, setBrand] = React.useState<{
+    title?: string | null;
+    logo_url?: string | null;
+    updated_at?: any;
+  } | null>(null);
 
   React.useEffect(() => {
-    const onEsc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    setBrand(loadBrandFromLocalStorage() as any);
+    const onBrandUpdated = () => {
+      // WAŻNE: odkładamy setState do następnej klatki
+      requestAnimationFrame(() => {
+        setBrand(loadBrandFromLocalStorage() as any);
+      });
+    };
+    window.addEventListener('houser:brand:updated', onBrandUpdated);
+    return () =>
+      window.removeEventListener('houser:brand:updated', onBrandUpdated);
+  }, []);
+
+  React.useEffect(() => {
+    const onEsc = (e: KeyboardEvent) =>
+      e.key === 'Escape' && setOpen(false);
     window.addEventListener('keydown', onEsc);
     return () => window.removeEventListener('keydown', onEsc);
   }, []);
@@ -127,8 +136,37 @@ export default function Header() {
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* LEFT: logo + nav */}
         <div className="flex items-center gap-6">
-          <Link href="/" className="text-xl font-extrabold tracking-tight text-gray-900">
-            <span className="text-brand-600">houser</span>.pl
+          <Link href="/" className="flex items-center gap-3">
+            {(() => {
+              const src = resolveAssetSrc(brand?.logo_url);
+              if (src) {
+                const needsBuster = !/^(data:|blob:)/i.test(src);
+                const finalSrc = needsBuster
+                  ? `${src}${src.includes('?') ? '&' : '?'}v=${encodeURIComponent(
+                      String(
+                        brand?.updated_at ?? brand?.logo_url ?? '1'
+                      )
+                    )}`
+                  : src;
+                return (
+                  <div className="logo-frame">
+                    <img
+                      src={finalSrc}
+                      alt={brand?.title || 'Houser'}
+                      className="brand-logo"
+                    />
+                  </div>
+                );
+              }
+              return (
+                <span className="text-xl font-extrabold tracking-tight text-gray-900">
+                  <span className="text-brand-600">
+                    {(brand?.title || 'houser').toLowerCase()}
+                  </span>
+                  .pl
+                </span>
+              );
+            })()}
           </Link>
 
           <nav className="hidden md:flex items-center gap-2">
@@ -136,7 +174,9 @@ export default function Header() {
             <NavLink href="/kategorie" label="Kategorie" />
             <NavLink href="/nowe-oferty" label="Nowe oferty" />
             <NavLink href="/blog" label="Blog" />
-            {user && <NavLink href="/moje-ogloszenia" label="Moje ogłoszenia" />}
+            {user && (
+              <NavLink href="/moje-ogloszenia" label="Moje ogłoszenia" />
+            )}
           </nav>
         </div>
 
@@ -150,7 +190,6 @@ export default function Header() {
             Dodaj ogłoszenie
           </Link>
 
-          {/* User avatar / login */}
           {user ? (
             <div className="relative">
               <button
@@ -181,7 +220,9 @@ export default function Header() {
                     role="menu"
                     aria-label="menu użytkownika"
                   >
-                    <div className="px-3 py-2 text-xs text-gray-500">Twoje konto</div>
+                    <div className="px-3 py-2 text-xs text-gray-500">
+                      Twoje konto
+                    </div>
                     <button
                       className="dropdown-item inline-flex items-center gap-2 text-gray-800"
                       onClick={() => {
@@ -225,12 +266,29 @@ export default function Header() {
             </Link>
           )}
 
-          {/* Mobile menu placeholder (opcjonalnie) */}
           <button className="md:hidden rounded-xl border border-gray-200 p-2 hover:bg-gray-50">
             <Menu className="h-5 w-5 text-gray-700" />
           </button>
         </div>
       </div>
+
+      {/* Scoped style tylko dla logotypu */}
+      <style jsx>{`
+        .logo-frame {
+          width: 80px;
+          height: 60px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+        .brand-logo {
+          max-width: 100%;
+          max-height: 100%;
+          object-fit: contain;
+          display: block;
+        }
+      `}</style>
     </header>
   );
 }

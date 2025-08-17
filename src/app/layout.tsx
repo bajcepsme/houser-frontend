@@ -1,27 +1,23 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
-import { AuthProvider } from '@/contexts/AuthContext';
+import type { Metadata } from 'next';
 import Header from '@/components/Header';
-import 'leaflet/dist/leaflet.css';
-import BrandLoader from '@/components/BrandLoader';
-
-const inter = Inter({ subsets: ['latin'] });
+import BrandBootstrap from '@/components/BrandBootstrap';
+import AppProviders from '@/components/AppProviders';
 
 export const metadata: Metadata = {
-  title: 'Houser.pl 2.0',
-  description: 'Nowoczesny serwis nieruchomości z Laravel i Next.js',
+  title: 'Houser.pl',
+  description: 'Nowoczesny serwis nieruchomości',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pl">
-      <body className={inter.className}>
-        <BrandLoader />
-        <AuthProvider>
+      <body className="min-h-screen bg-[var(--brand-page-bg,#f8fafc)] text-[var(--brand-text,#111827)]">
+        <AppProviders>
+          <BrandBootstrap />
           <Header />
           {children}
-        </AuthProvider>
+        </AppProviders>
       </body>
     </html>
   );

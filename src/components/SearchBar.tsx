@@ -4,12 +4,14 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MapPin } from "lucide-react";
 
+/* ======================= Types ======================= */
+
 type ApiHit = {
   id?: string | number;
   city?: string;
-  name?: string;           // gdyby backend kiedyś zwrócił "name"
-  voivodeship?: string;    // województwo
-  region?: string;         // alternatywna nazwa województwa
+  name?: string;
+  voivodeship?: string; // województwo
+  region?: string;      // alternatywna nazwa województwa
   county?: string;
   simc_type?: string;
   type?: string;
@@ -17,8 +19,8 @@ type ApiHit = {
 
 type Hit = {
   id: string;
-  name: string;            // miasto/miejscowość
-  region?: string;         // województwo
+  name: string;         // miasto/miejscowość
+  region?: string;      // województwo
   county?: string;
   type?: string;
 };
@@ -31,6 +33,18 @@ type Props = {
   preventFreeEnterNav?: boolean;
 };
 
+/* ======================= Helpers ======================= */
+
+function apiBase() {
+  return (
+    (process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || "http://127.0.0.1:8000")
+      .toString()
+      .replace(/\/+$/, "")
+  );
+}
+
+/* ======================= Component ======================= */
+
 export default function SearchBar({
   initialCity = "",
   onPick,
@@ -39,6 +53,7 @@ export default function SearchBar({
   preventFreeEnterNav = false,
 }: Props) {
   const router = useRouter();
+
   const [value, setValue] = useState<string>(String(initialCity ?? ""));
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -48,6 +63,11 @@ export default function SearchBar({
   const abortRef = useRef<AbortController | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+
+  // aktualizacja value, jeśli initialCity zmieni się z zewnątrz
+  useEffect(() => {
+    setValue(String(initialCity ?? ""));
+  }, [initialCity]);
 
   // zamykanie po kliknięciu poza / ESC
   useEffect(() => {
@@ -80,10 +100,7 @@ export default function SearchBar({
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
-    const API =
-      (process.env.NEXT_PUBLIC_API_URL ?? "").trim() || "http://127.0.0.1:8000";
-    const base = API.replace(/\/+$/, "");
-    const url = `${base}/api/v1/geo/search?q=${encodeURIComponent(q)}&limit=20`;
+    const url = `${apiBase()}/api/v1/geo/search?q=${encodeURIComponent(q)}&limit=20`;
 
     const t = setTimeout(async () => {
       try {
@@ -94,6 +111,10 @@ export default function SearchBar({
         // różne kształty odpowiedzi → weź tablicę rekordów
         const raw: ApiHit[] = Array.isArray(payload?.hits)
           ? payload.hits
+          : Array.isArray(payload?.items)
+          ? payload.items
+          : Array.isArray(payload?.data)
+          ? payload.data
           : Array.isArray(payload)
           ? payload
           : [];
@@ -105,8 +126,7 @@ export default function SearchBar({
             const name = String(r.name ?? r.city ?? "").trim();
             const region = String(r.region ?? r.voivodeship ?? "").trim();
             if (!name) return null;
-            const id =
-              String(r.id ?? `${name}|${region}|${r.county ?? ""}`) || name;
+            const id = String(r.id ?? `${name}|${region}|${r.county ?? ""}`) || name;
             return {
               id,
               name,
@@ -135,7 +155,7 @@ export default function SearchBar({
       } finally {
         setLoading(false);
       }
-    }, 150);
+    }, 180); // lekki debounce
 
     return () => {
       clearTimeout(t);
@@ -162,7 +182,7 @@ export default function SearchBar({
       return !t || allowed.some((a) => t.includes(a));
     });
 
-    // 2) funkcja scoringu — musi być ZANIM zostanie użyta
+    // 2) scoring
     const score = (h: Hit) => {
       const name = String(h.name ?? (h as any).city ?? "").toLocaleLowerCase("pl-PL");
       const voiv = String(
@@ -172,19 +192,14 @@ export default function SearchBar({
       const q = (value ?? "").trim().toLocaleLowerCase("pl-PL");
 
       let s = 0;
-
-      // 0– bazowe dopasowanie do zapytania
       if (q && name === q) s += 100;
       if (q && name.startsWith(q)) s += 40;
 
-      // 1– preferuj “miasto” (jeśli backend kiedyś zacznie zwracać typ)
       const t = String((h as any).type ?? "").toLowerCase();
       if (t.includes("miasto")) s += 50;
 
-      // 2– preferuj, gdy powiat = nazwa miasta (często „miasto na prawach powiatu”)
       if (county === name || county.includes("m.") || county.includes("miasto")) s += 40;
 
-      // 3– preferuj stolice województw (mapa niżej)
       const capitals: Record<string, string> = {
         warszawa: "mazowieckie",
         kraków: "małopolskie",
@@ -200,10 +215,8 @@ export default function SearchBar({
         katowice: "śląskie",
         opole: "opolskie",
         łódź: "łódzkie",
-        // kujawsko-pomorskie ma 2 stolice – obie premiujemy:
         bydgoszcz: "kujawsko-pomorskie",
         toruń: "kujawsko-pomorskie",
-        // lubuskie ma 2 stolice:
         "zielona góra": "lubuskie",
         "gorzów wielkopolski": "lubuskie",
       };
@@ -212,8 +225,7 @@ export default function SearchBar({
       return s;
     };
 
-    // 3) deduplikacja po *samej nazwie* (zostaw jeden wpis „Warszawa”)
-    //    przy remisie preferuj rekord o wyższym score
+    // 3) deduplikacja po nazwie (zostaw jeden najlepszy)
     const bestByName = new Map<string, { hit: Hit; s: number }>();
     for (const h of onlyCities) {
       const key = String(h.name ?? (h as any).city ?? "").toLocaleLowerCase("pl-PL");
@@ -223,7 +235,7 @@ export default function SearchBar({
     }
     const list = Array.from(bestByName.values()).map((x) => x.hit);
 
-    // 4) końcowe sortowanie wg score i limit do 10
+    // 4) sort i limit
     return list.sort((a, b) => score(b) - score(a)).slice(0, 10);
   }, [rawHits, value]);
 
@@ -234,9 +246,10 @@ export default function SearchBar({
       onPick({ name: h.name, region: h.region });
     } else {
       const params = new URLSearchParams();
+      // główny parametr jaki czyta Twoja strona wyników:
+      params.set("lokalizacja", h.name);
+      // dla kompatybilności z wcześniejszym routingiem:
       params.set("city", h.name);
-      // (opcjonalnie) możesz też dodać region do URL:
-      // if (h.region) params.set("region", h.region);
       router.push(`/ogloszenia?${params.toString()}`);
     }
   };
@@ -262,6 +275,7 @@ export default function SearchBar({
   // nawigacja klawiszami
   const onKeyDownInput: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
     if (!open || (!loading && hits.length === 0)) return;
+
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setActiveIndex((i) => Math.min((i < 0 ? -1 : i) + 1, hits.length - 1));
@@ -280,11 +294,14 @@ export default function SearchBar({
       if (activeIndex >= 0 && activeIndex < hits.length) {
         e.preventDefault();
         pick(hits[activeIndex]);
-} else if (!onPick && !preventFreeEnterNav && value.trim()) {
-  e.preventDefault();
-  const q = encodeURIComponent(value.trim());
-  router.push(`/ogloszenia?city=${q}`);
-}
+      } else if (!onPick && !preventFreeEnterNav && value.trim()) {
+        e.preventDefault();
+        const name = value.trim();
+        const params = new URLSearchParams();
+        params.set("lokalizacja", name);
+        params.set("city", name);
+        router.push(`/ogloszenia?${params.toString()}`);
+      }
     }
   };
 
@@ -302,14 +319,20 @@ export default function SearchBar({
           aria-expanded={open}
           aria-controls="city-suggest-list"
         />
+
+        {/* Uwaga: type='button' żeby nie wywoływać submitu z nadrzędnego <form> */}
         <button
           className="btn-primary px-4"
-onClick={() => {
-  if (!onPick && !preventFreeEnterNav && value.trim()) {
-    router.push(`/ogloszenia?city=${encodeURIComponent(value.trim())}`);
-  }
-}}
           type="button"
+          onClick={() => {
+            const name = value.trim();
+            if (!onPick && !preventFreeEnterNav && name) {
+              const params = new URLSearchParams();
+              params.set("lokalizacja", name);
+              params.set("city", name);
+              router.push(`/ogloszenia?${params.toString()}`);
+            }
+          }}
         >
           Szukaj
         </button>
