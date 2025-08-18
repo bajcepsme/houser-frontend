@@ -1,8 +1,10 @@
-"use client";
+'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { MapPin } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { MapPin } from 'lucide-react';
+
+
 
 /* ======================= Types ======================= */
 

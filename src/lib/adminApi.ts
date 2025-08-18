@@ -1,34 +1,35 @@
 // src/lib/adminApi.ts
-export const API_BASE = ((process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '')) + '/api';
-
-if (!process.env.NEXT_PUBLIC_API_URL) {
-  console.warn('NEXT_PUBLIC_API_URL is not set.');
-}
-
 type FetchOptions = {
-  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
-  token?: string | null;
+  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   json?: any;
   formData?: FormData;
   headers?: Record<string, string>;
 };
 
-export async function adminFetch<T = any>(path: string, opts: FetchOptions = {}): Promise<T> {
-  const url = `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
-  const token = opts.token ?? (typeof window !== 'undefined' ? localStorage.getItem('token') : null);
+function getBearer(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("token");
+}
 
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-    ...(opts.headers || {}),
+/** Fetch do naszego Next API (proxy). */
+async function frontendFetch<T = any>(path: string, opts: FetchOptions = {}): Promise<T> {
+  const url = path.startsWith("/") ? path : `/${path}`;
+  const headers: Record<string, string> = { Accept: "application/json", ...(opts.headers || {}) };
+
+  // Dodaj Authorization: Bearer <token> z localStorage, jeśli jest.
+  const token = getBearer();
+  if (token && !headers.Authorization) headers.Authorization = `Bearer ${token}`;
+
+  const init: RequestInit = {
+    method: opts.method || "GET",
+    headers,
+    credentials: "include", // wyśle nasze cookies do /api/*
   };
-  const init: RequestInit = { method: opts.method || 'GET', headers };
-
-  if (token) headers.Authorization = `Bearer ${token}`;
 
   if (opts.formData) {
-    init.body = opts.formData; // nie ustawiamy Content-Type
-  } else if (opts.json) {
-    headers['Content-Type'] = 'application/json';
+    init.body = opts.formData;
+  } else if (opts.json !== undefined) {
+    headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(opts.json);
   }
 
@@ -45,26 +46,15 @@ export async function adminFetch<T = any>(path: string, opts: FetchOptions = {})
   return res.json() as Promise<T>;
 }
 
-/* ---------- API ---------- */
 export const adminApi = {
-  // Users
-  getUsers: () => adminFetch('/v1/admin/users'),
-  updateUser: (id: number, payload: any) =>
-    adminFetch(`/v1/admin/users/${id}`, { method: 'PATCH', json: payload }),
-
-  // Organizations
-  getOrganizations: () => adminFetch('/v1/admin/organizations'),
-  getOrganization: (id: number) => adminFetch(`/v1/admin/organizations/${id}`), // ⬅ DODANE
-  updateOrganization: (id: number, payload: any) =>
-    adminFetch(`/v1/admin/organizations/${id}`, { method: 'PATCH', json: payload }),
-
-  // Branding / settings (superadmin)
-  getBrand: () => adminFetch('/v1/admin/settings/brand'),
-  saveBrand: (payload: any) =>
-    adminFetch('/v1/admin/settings/brand', { method: 'POST', json: payload }),
+  // BRANDING – via proxy
+  getBrand: () => frontendFetch("/api/admin/brand", { method: "GET" }),
+  saveBrand: (payload: any) => frontendFetch("/api/admin/brand", { method: "POST", json: payload }),
   uploadLogo: (file: File) => {
     const fd = new FormData();
-    fd.append('logo', file);
-    return adminFetch('/v1/admin/settings/logo', { method: 'POST', formData: fd });
+    fd.append("logo", file);
+    return frontendFetch("/api/admin/brand/logo", { method: "POST", formData: fd });
   },
+
+  // (opcjonalnie zostaw to, co masz dla innych zasobów… ale dla brand używaj proxy)
 };

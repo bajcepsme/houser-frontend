@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import Header from '@/components/Header';
 import BrandBootstrap from '@/components/BrandBootstrap';
 import AppProviders from '@/components/AppProviders';
+import BrandMetadataClient from '@/components/BrandMetadataClient';
 
 export const metadata: Metadata = {
   title: 'Houser.pl',
@@ -12,9 +13,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pl">
-      <body className="min-h-screen bg-[var(--brand-page-bg,#f8fafc)] text-[var(--brand-text,#111827)]">
+      <body>
         <AppProviders>
           <BrandBootstrap />
+          <BrandMetadataClient /> {/* zawsze client */}
           <Header />
           {children}
         </AppProviders>

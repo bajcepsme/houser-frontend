@@ -5,27 +5,25 @@
 export type Align3 = 'left' | 'center' | 'right';
 
 export type ListingCardBlock = {
-  /* karta */
   cardBg?: string;
   cardRadius?: number;
   cardPx?: number;
   cardPy?: number;
+  shadow?: string;
 
-  /* obrazek */
-  imgAspect?: string; // '16 / 9', '4 / 3', '1 / 1' itd.
+  imgAspect?: string;
+  imgCounterBg?: string;
+  imgCounterColor?: string;
 
-  /* tytuł */
   titleSize?: number;
   titleWeight?: number;
   titleAlign?: Align3;
   titleMb?: number;
 
-  /* adres */
   addressSize?: number;
   addressWeight?: number;
   addressMt?: number;
 
-  /* cena */
   priceBg?: string;
   priceColor?: string;
   priceSize?: number;
@@ -35,7 +33,6 @@ export type ListingCardBlock = {
   pricePx?: number;
   pricePy?: number;
 
-  /* chip */
   chipBg?: string;
   chipColor?: string;
   chipJustify?: Align3;
@@ -44,11 +41,6 @@ export type ListingCardBlock = {
   chipPy?: number;
   chipRadius?: number;
 
-  /* licznik zdjęć */
-  imgCounterBg?: string;
-  imgCounterColor?: string;
-
-  /* meta */
   metaBg?: string;
   metaColor?: string;
   metaRadius?: number;
@@ -59,13 +51,33 @@ export type ListingCardBlock = {
   metaJustify?: Align3;
   metaMt?: number;
 
-  /* cień karty */
-  shadow?: string;
+  hrShow?: 0 | 1;
+  hrColor?: string;
+  hrThickness?: number;
+  /** NOWE: kontrola odstępów i paddingów poziomej linii */
+  hrMt?: number;
+  hrMb?: number;
+  hrPt?: number;
+  hrPb?: number;
+
+  avatarShow?: 0 | 1;
+  avatarSize?: number;
+  avatarShadow?: string;
+
+  favBg?: string;
+  favColor?: string;
+  favBgHover?: string;
+  favColorHover?: string;
+  favBgActive?: string;
+  favColorActive?: string;
+  favSize?: number;
+  favRadius?: number;
+  favShadow?: string;
 };
 
 export type ListingCardDesignValue = {
-  grid?: ListingCardBlock;
-  list?: ListingCardBlock;
+  grid?: Partial<ListingCardBlock>;
+  list?: Partial<ListingCardBlock>;
 };
 
 export type BrandPayload = {
@@ -85,32 +97,27 @@ export type BrandPayload = {
 
 /* ======================= Stałe ======================= */
 
-export const LS_KEY = 'houser.brand';
+export const BRAND_STORAGE_KEY = 'houser.brand';
 export const BRAND_EVENT = 'houser:brand:updated';
 
-const JUSTIFY: Record<Align3, string> = {
-  left: 'flex-start',
-  center: 'center',
-  right: 'flex-end',
-};
-const TEXT_ALIGN: Record<Align3, string> = {
-  left: 'left',
-  center: 'center',
-  right: 'right',
-};
+const JUSTIFY: Record<Align3, string> = { left: 'flex-start', center: 'center', right: 'flex-end' };
+const TEXT_ALIGN: Record<Align3, string> = { left: 'left', center: 'center', right: 'right' };
 
 /* ======================= Utils ======================= */
 
 function setVar(el: HTMLElement, name: string, value?: string | number | null) {
-  if (value === undefined || value === null || value === '') return;
-  el.style.setProperty(name, String(value));
+  if (value === undefined || value === null || value === '') {
+    el.style.removeProperty(name);
+  } else {
+    el.style.setProperty(name, String(value));
+  }
 }
 
 export function deepMerge<T extends object>(base: T, patch?: Partial<T> | null): T {
   if (!patch) return base;
   const out: any = Array.isArray(base) ? [...(base as any)] : { ...base };
   for (const [k, v] of Object.entries(patch)) {
-    if (v && typeof v === 'object' && !Array.isArray(v)) {
+    if (v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date)) {
       out[k] = deepMerge((out as any)[k] || {}, v as any);
     } else if (v !== undefined) {
       out[k] = v as any;
@@ -126,18 +133,17 @@ const dBlock: Required<ListingCardBlock> = {
   cardRadius: 14,
   cardPx: 0,
   cardPy: 0,
-
+  shadow: '0 2px 8px rgba(2,6,23,0.07), 0 12px 32px rgba(2,6,23,0.06)',
   imgAspect: '16 / 9',
-
+  imgCounterBg: 'rgba(0,0,0,.55)',
+  imgCounterColor: '#fff',
   titleSize: 16,
   titleWeight: 700,
   titleAlign: 'left',
   titleMb: 0,
-
   addressSize: 12,
   addressWeight: 400,
   addressMt: 4,
-
   priceBg: '#ffb800',
   priceColor: '#111827',
   priceSize: 14,
@@ -146,7 +152,6 @@ const dBlock: Required<ListingCardBlock> = {
   priceMt: 8,
   pricePx: 10,
   pricePy: 6,
-
   chipBg: 'rgba(0,0,0,.65)',
   chipColor: '#fff',
   chipJustify: 'left',
@@ -154,10 +159,6 @@ const dBlock: Required<ListingCardBlock> = {
   chipPx: 10,
   chipPy: 4,
   chipRadius: 999,
-
-  imgCounterBg: 'rgba(0,0,0,.55)',
-  imgCounterColor: '#fff',
-
   metaBg: 'rgba(17,24,39,.06)',
   metaColor: '#111827',
   metaRadius: 10,
@@ -167,8 +168,25 @@ const dBlock: Required<ListingCardBlock> = {
   metaWeight: 500,
   metaJustify: 'left',
   metaMt: 10,
-
-  shadow: '0 2px 8px rgba(2,6,23,0.07), 0 12px 32px rgba(2,6,23,0.06)',
+  hrShow: 0,
+  hrColor: 'rgba(17,24,39,.12)',
+  hrThickness: 1,
+  hrMt: 10,
+  hrMb: 10,
+  hrPt: 0,
+  hrPb: 0,
+  avatarShow: 1,
+  avatarSize: 28,
+  avatarShadow: '0 2px 8px rgba(2,6,23,.08)',
+  favBg: 'rgba(255,255,255,.9)',
+  favColor: '#111827',
+  favBgHover: 'rgba(255,255,255,1)',
+  favColorHover: '#0f172a',
+  favBgActive: 'rgba(37,99,235,.10)',
+  favColorActive: '#2563eb',
+  favSize: 36,
+  favRadius: 999,
+  favShadow: '0 6px 16px rgba(2,6,23,.12)',
 };
 
 export const DEFAULT_BRAND: BrandPayload = {
@@ -185,38 +203,30 @@ export const DEFAULT_BRAND: BrandPayload = {
   button_radius: 14,
   listing_card: {
     grid: { ...dBlock },
-    // List ma z definicji „szersze” zdjęcie – lepsze dla horyzontalnych kafli
     list: { ...dBlock, imgAspect: '21 / 9' },
   },
 };
 
 export function getDefaultBrand(): BrandPayload {
-  // zwracamy kopię, by nic nie mutowało stałej
   return JSON.parse(JSON.stringify(DEFAULT_BRAND));
 }
 
 /* ======================= LocalStorage ======================= */
 
-// --- STORAGE KEY (stabilny) ---
-export const BRAND_STORAGE_KEY = 'houser.brand.v1';
-
-// --- ZAPIS: zapisujemy CAŁY payload (łącznie z logo, title, SEO) ---
 export function saveBrandToLocalStorage(brand: BrandPayload) {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(BRAND_STORAGE_KEY, JSON.stringify(brand));
-  } catch {}
+  } catch (e) {
+    console.error('Failed to save brand to localStorage:', e);
+  }
 }
 
-// --- ODCZYT: mergujemy z defaultem i normalizujemy ---
 export function loadBrandFromLocalStorage(): BrandPayload | null {
   if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem(BRAND_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<BrandPayload>;
-    // dbamy, żeby brakujące pola dostały defaulty:
-    return normalizeBrand(deepMerge(DEFAULT_BRAND, parsed));
+    return raw ? (JSON.parse(raw) as BrandPayload) : null;
   } catch {
     return null;
   }
@@ -229,62 +239,83 @@ export function notifyBrandUpdated(): void {
 
 /* ======================= Nakładanie CSS vars ======================= */
 
-function applyBlock(root: HTMLElement, prefix: '--lc-grid' | '--lc-list', b?: ListingCardBlock) {
+function applyBlock(root: HTMLElement, prefix: '--lc-grid' | '--lc-list', b?: Partial<ListingCardBlock>) {
   const v = deepMerge(dBlock, b || {});
 
-  setVar(root, `${prefix}-bg`, v.cardBg);
-  setVar(root, `${prefix}-radius`, v.cardRadius + 'px');
-  setVar(root, `${prefix}-px`, v.cardPx + 'px');
-  setVar(root, `${prefix}-py`, v.cardPy + 'px');
+  const mapping: {
+    [K in keyof Required<ListingCardBlock>]: { name: string; unit?: string; transform?: (val: any) => string };
+  } = {
+    cardBg: { name: 'bg' },
+    cardRadius: { name: 'radius', unit: 'px' },
+    cardPx: { name: 'px', unit: 'px' },
+    cardPy: { name: 'py', unit: 'px' },
+    shadow: { name: 'shadow' },
+    imgAspect: { name: 'img-aspect' },
+    imgCounterBg: { name: 'imgcount-bg' },
+    imgCounterColor: { name: 'imgcount-color' },
+    titleSize: { name: 'title-size', unit: 'px' },
+    titleWeight: { name: 'title-weight' },
+    titleAlign: { name: 'title-align', transform: (val) => TEXT_ALIGN[val] },
+    titleMb: { name: 'title-mb', unit: 'px' },
+    addressSize: { name: 'address-size', unit: 'px' },
+    addressWeight: { name: 'address-weight' },
+    addressMt: { name: 'address-mt', unit: 'px' },
+    priceBg: { name: 'price-bg' },
+    priceColor: { name: 'price-color' },
+    priceSize: { name: 'price-size', unit: 'px' },
+    priceWeight: { name: 'price-weight' },
+    priceJustify: { name: 'price-justify', transform: (val) => JUSTIFY[val] },
+    priceMt: { name: 'price-mt', unit: 'px' },
+    pricePx: { name: 'price-px', unit: 'px' },
+    pricePy: { name: 'price-py', unit: 'px' },
+    chipBg: { name: 'chip-bg' },
+    chipColor: { name: 'chip-color' },
+    chipJustify: { name: 'chip-justify', transform: (val) => JUSTIFY[val] },
+    chipFont: { name: 'chip-fs', unit: 'px' },
+    chipPx: { name: 'chip-px', unit: 'px' },
+    chipPy: { name: 'chip-py', unit: 'px' },
+    chipRadius: { name: 'chip-radius', unit: 'px' },
+    metaBg: { name: 'meta-bg' },
+    metaColor: { name: 'meta-color' },
+    metaRadius: { name: 'meta-radius', unit: 'px' },
+    metaPx: { name: 'meta-px', unit: 'px' },
+    metaPy: { name: 'meta-py', unit: 'px' },
+    metaFont: { name: 'meta-fs', unit: 'px' },
+    metaWeight: { name: 'meta-weight' },
+    metaJustify: { name: 'meta-justify', transform: (val) => JUSTIFY[val] },
+    metaMt: { name: 'meta-mt', unit: 'px' },
+    hrShow: { name: 'hr-show' },
+    hrColor: { name: 'hr-color' },
+    hrThickness: { name: 'hr-thickness', unit: 'px' },
+    hrMt: { name: 'hr-mt', unit: 'px' },
+    hrMb: { name: 'hr-mb', unit: 'px' },
+    hrPt: { name: 'hr-pt', unit: 'px' },
+    hrPb: { name: 'hr-pb', unit: 'px' },
+    avatarShow: { name: 'avatar-show' },
+    avatarSize: { name: 'avatar-size', unit: 'px' },
+    avatarShadow: { name: 'avatar-shadow' },
+    favBg: { name: 'fav-bg' },
+    favColor: { name: 'fav-color' },
+    favBgHover: { name: 'fav-bg-hover' },
+    favColorHover: { name: 'fav-color-hover' },
+    favBgActive: { name: 'fav-bg-active' },
+    favColorActive: { name: 'fav-color-active' },
+    favSize: { name: 'fav-size', unit: 'px' },
+    favRadius: { name: 'fav-radius', unit: 'px' },
+    favShadow: { name: 'fav-shadow' },
+  };
 
-  setVar(root, `${prefix}-img-aspect`, v.imgAspect);
-  setVar(root, `${prefix}-img-ratio`, v.imgAspect);
-
-  setVar(root, `${prefix}-title-size`, v.titleSize + 'px');
-  setVar(root, `${prefix}-title-weight`, v.titleWeight);
-  setVar(root, `${prefix}-title-align`, TEXT_ALIGN[v.titleAlign]);
-  setVar(root, `${prefix}-title-mb`, v.titleMb + 'px');
-
-  setVar(root, `${prefix}-address-size`, v.addressSize + 'px');
-  setVar(root, `${prefix}-address-weight`, v.addressWeight);
-  setVar(root, `${prefix}-address-mt`, v.addressMt + 'px');
-
-  setVar(root, `${prefix}-price-bg`, v.priceBg);
-  setVar(root, `${prefix}-price-color`, v.priceColor);
-  setVar(root, `${prefix}-price-size`, v.priceSize + 'px');
-  setVar(root, `${prefix}-price-weight`, v.priceWeight);
-  setVar(root, `${prefix}-price-justify`, JUSTIFY[v.priceJustify]);
-  setVar(root, `${prefix}-price-mt`, v.priceMt + 'px');
-  setVar(root, `${prefix}-price-px`, v.pricePx + 'px');
-  setVar(root, `${prefix}-price-py`, v.pricePy + 'px');
-
-  setVar(root, `${prefix}-chip-bg`, v.chipBg);
-  setVar(root, `${prefix}-chip-color`, v.chipColor);
-  setVar(root, `${prefix}-chip-justify`, JUSTIFY[v.chipJustify]);
-  setVar(root, `${prefix}-chip-fs`, v.chipFont + 'px');
-  setVar(root, `${prefix}-chip-px`, v.chipPx + 'px');
-  setVar(root, `${prefix}-chip-py`, v.chipPy + 'px');
-  setVar(root, `${prefix}-chip-radius`, v.chipRadius + 'px');
-
-  setVar(root, `${prefix}-imgcount-bg`, v.imgCounterBg);
-  setVar(root, `${prefix}-imgcount-color`, v.imgCounterColor);
-
-  setVar(root, `${prefix}-meta-bg`, (b as any)?.metaBg ?? (b as any)?.meta?.background ?? v.metaBg);
-  setVar(root, `${prefix}-meta-color`, v.metaColor);
-  setVar(root, `${prefix}-meta-radius`, v.metaRadius + 'px');
-  setVar(root, `${prefix}-meta-px`, v.metaPx + 'px');
-  setVar(root, `${prefix}-meta-py`, v.metaPy + 'px');
-  setVar(root, `${prefix}-meta-fs`, v.metaFont + 'px');
-  setVar(root, `${prefix}-meta-weight`, v.metaWeight);
-  setVar(root, `${prefix}-meta-justify`, JUSTIFY[v.metaJustify]);
-  setVar(root, `${prefix}-meta-mt`, v.metaMt + 'px');
-
-  setVar(root, `${prefix}-shadow`, v.shadow);
+  for (const key in mapping) {
+    const k = key as keyof Required<ListingCardBlock>;
+    const config = mapping[k];
+    const value = (v as any)[k];
+    const finalValue = config.transform ? config.transform(value) : `${value}${config.unit || ''}`;
+    setVar(root, `${prefix}-${config.name}`, finalValue);
+  }
 }
 
 export function normalizeBrand(input?: Partial<BrandPayload> | null): BrandPayload {
   const merged = deepMerge(getDefaultBrand(), input || {});
-  // gwarantujemy obie sekcje
   merged.listing_card = merged.listing_card || {};
   merged.listing_card.grid = deepMerge(dBlock, merged.listing_card.grid || {});
   merged.listing_card.list = deepMerge({ ...dBlock, imgAspect: '21 / 9' }, merged.listing_card.list || {});
@@ -295,111 +326,29 @@ export function applyBrandToElement(el: HTMLElement, brand?: Partial<BrandPayloa
   if (!el) return;
   const b = normalizeBrand(brand);
 
-  setVar(el, '--brand-primary', b.primary_color ?? '#2563eb');
-  setVar(el, '--brand-secondary', b.secondary_color ?? '#f97316');
-  setVar(el, '--brand-page-bg', b.page_bg ?? '#f6f8fb');
-  setVar(el, '--brand-header-bg', b.header_bg ?? '#ffffff');
-  setVar(el, '--brand-text', b.text_color ?? '#0f172a');
-  setVar(el, '--brand-button-radius', String(b.button_radius ?? 14) + 'px');
+  // Kolory globalne
+  setVar(el, '--brand-primary', b.primary_color);
+  setVar(el, '--brand-secondary', b.secondary_color);
+  // Kompatybilność: obsłuż obie nazwy zmiennej tła
+  setVar(el, '--brand-page-bg', b.page_bg);
+  setVar(el, '--brand-bg', b.page_bg);
+  setVar(el, '--brand-header-bg', b.header_bg);
+  setVar(el, '--brand-text', b.text_color);
+  setVar(el, '--brand-button-radius', `${b.button_radius ?? 14}px`);
 
-  applyBlock(el, '--lc-grid', b.listing_card?.grid || undefined);
-  applyBlock(el, '--lc-list', b.listing_card?.list || undefined);
+  // Karty
+  applyBlock(el, '--lc-grid', b.listing_card?.grid);
+  applyBlock(el, '--lc-list', b.listing_card?.list);
 }
 
 export function applyBrandToHtml(brand?: Partial<BrandPayload> | null) {
   if (typeof document === 'undefined') return;
-  applyBrandToElement(document.documentElement, brand ?? loadBrandFromLocalStorage());
+  const payload = brand || loadBrandFromLocalStorage();
+  applyBrandToElement(document.documentElement, payload);
 }
 
-/* ======================= Presety (jasne) ======================= */
-
+/* ======================= Presety ======================= */
 export const BRAND_PRESETS: Record<string, Partial<BrandPayload>> = {
-  'Minimal Light': {
-    page_bg: '#f6f8fb',
-    text_color: '#0f172a',
-    listing_card: {
-      grid: { cardBg: '#ffffff', shadow: '0 2px 8px rgba(2,6,23,.06), 0 14px 34px rgba(2,6,23,.06)' },
-      list: { cardBg: '#ffffff', imgAspect: '21 / 9', shadow: '0 2px 8px rgba(2,6,23,.06), 0 14px 34px rgba(2,6,23,.06)' },
-    },
-  },
-  'Warm Amber': {
-    page_bg: '#faf7f2',
-    text_color: '#0b1220',
-    listing_card: {
-      grid: { cardBg: '#ffffff', priceBg: '#fde68a', priceColor: '#0b1220', chipBg: 'rgba(180,83,9,.14)', chipColor: '#78350f' },
-      list: { cardBg: '#ffffff', imgAspect: '21 / 9', priceBg: '#fde68a', priceColor: '#0b1220', chipBg: 'rgba(180,83,9,.14)', chipColor: '#78350f' },
-    },
-  },
-  'Soft Sage': {
-    page_bg: '#f5f8f6',
-    text_color: '#0f172a',
-    listing_card: {
-      grid: { cardBg: '#ffffff', priceBg: '#dcfce7', priceColor: '#065f46', chipBg: 'rgba(16,185,129,.14)', chipColor: '#065f46' },
-      list: { cardBg: '#ffffff', imgAspect: '21 / 9', priceBg: '#dcfce7', priceColor: '#065f46', chipBg: 'rgba(16,185,129,.14)', chipColor: '#065f46' },
-    },
-  },
-  'Silver Frost': {
-    page_bg: '#f4f6f8',
-    text_color: '#0f172a',
-    listing_card: {
-      grid: { cardBg: '#ffffff', priceBg: '#e5e7eb', priceColor: '#0f172a', chipBg: 'rgba(55,65,81,.12)', chipColor: '#111827' },
-      list: { cardBg: '#ffffff', imgAspect: '21 / 9', priceBg: '#e5e7eb', priceColor: '#0f172a', chipBg: 'rgba(55,65,81,.12)', chipColor: '#111827' },
-    },
-  },
-  'Coral Accent': {
-    page_bg: '#fff7f5',
-    text_color: '#0f172a',
-    listing_card: {
-      grid: { cardBg: '#ffffff', priceBg: '#ffe4e6', priceColor: '#be123c', chipBg: 'rgba(244,63,94,.14)', chipColor: '#9f1239' },
-      list: { cardBg: '#ffffff', imgAspect: '21 / 9', priceBg: '#ffe4e6', priceColor: '#be123c', chipBg: 'rgba(244,63,94,.14)', chipColor: '#9f1239' },
-    },
-  },
-  'Nordic Air': {
-    page_bg: '#f3f7fb',
-    text_color: '#0f172a',
-    listing_card: {
-      grid: { cardBg: '#ffffff', priceBg: '#dbeafe', priceColor: '#1e3a8a', chipBg: 'rgba(37,99,235,.14)', chipColor: '#1e3a8a' },
-      list: { cardBg: '#ffffff', imgAspect: '21 / 9', priceBg: '#dbeafe', priceColor: '#1e3a8a', chipBg: 'rgba(37,99,235,.14)', chipColor: '#1e3a8a' },
-    },
-  },
-  'Sandstone': {
-    page_bg: '#faf6f0',
-    text_color: '#0f172a',
-    listing_card: {
-      grid: { cardBg: '#ffffff', priceBg: '#fdecc8', priceColor: '#78350f', chipBg: 'rgba(217,119,6,.14)', chipColor: '#7c2d12' },
-      list: { cardBg: '#ffffff', imgAspect: '21 / 9', priceBg: '#fdecc8', priceColor: '#78350f', chipBg: 'rgba(217,119,6,.14)', chipColor: '#7c2d12' },
-    },
-  },
-  'Lavender Mist': {
-    page_bg: '#faf7ff',
-    text_color: '#0f172a',
-    listing_card: {
-      grid: { cardBg: '#ffffff', priceBg: '#ede9fe', priceColor: '#5b21b6', chipBg: 'rgba(124,58,237,.14)', chipColor: '#5b21b6' },
-      list: { cardBg: '#ffffff', imgAspect: '21 / 9', priceBg: '#ede9fe', priceColor: '#5b21b6', chipBg: 'rgba(124,58,237,.14)', chipColor: '#5b21b6' },
-    },
-  },
-  'Ocean Breeze': {
-    page_bg: '#f0f8ff',
-    text_color: '#0f172a',
-    listing_card: {
-      grid: { cardBg: '#ffffff', priceBg: '#cffafe', priceColor: '#155e75', chipBg: 'rgba(14,165,233,.14)', chipColor: '#0e7490' },
-      list: { cardBg: '#ffffff', imgAspect: '21 / 9', priceBg: '#cffafe', priceColor: '#155e75', chipBg: 'rgba(14,165,233,.14)', chipColor: '#0e7490' },
-    },
-  },
-  'Mossy': {
-    page_bg: '#f3f7f3',
-    text_color: '#0f172a',
-    listing_card: {
-      grid: { cardBg: '#ffffff', priceBg: '#e2f3e6', priceColor: '#14532d', chipBg: 'rgba(34,197,94,.14)', chipColor: '#166534' },
-      list: { cardBg: '#ffffff', imgAspect: '21 / 9', priceBg: '#e2f3e6', priceColor: '#14532d', chipBg: 'rgba(34,197,94,.14)', chipColor: '#166534' },
-    },
-  },
-  'Creamy Lime': {
-    page_bg: '#fbfdf7',
-    text_color: '#0f172a',
-    listing_card: {
-      grid: { cardBg: '#ffffff', priceBg: '#ecfccb', priceColor: '#3f6212', chipBg: 'rgba(132,204,22,.16)', chipColor: '#365314' },
-      list: { cardBg: '#ffffff', imgAspect: '21 / 9', priceBg: '#ecfccb', priceColor: '#3f6212', chipBg: 'rgba(132,204,22,.16)', chipColor: '#365314' },
-    },
-  },
+  'Minimal Light': {},
+  'Warm Amber': {},
 };

@@ -1,73 +1,94 @@
+// src/app/page.tsx
 import Link from 'next/link';
 import SearchBar from '@/components/SearchBar';
 import ListingCard from '@/components/ListingCard';
+import BrandHeading from '@/components/BrandHead';
 
 /* ======================= DATA HELPERS ======================= */
 
-async function fetchListings(limit = 8) {
+function toAbsoluteApiUrl(path?: string | null): string {
+  if (!path) return '';
+  const apiBase = (process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+  return `${apiBase}${path.startsWith('/') ? '' : '/'}${path}`;
+}
+
+async function fetchListings({ offer_type, limit }: { offer_type: 'sprzedaz' | 'wynajem'; limit: number }) {
   const base = (process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
-  const url = `${base}/api/v1/listings?limit=${limit}`;
+  const url = `${base}/api/v1/listings?limit=${limit}&offer_type=${offer_type}`;
 
   try {
     const res = await fetch(url, { cache: 'no-store', next: { revalidate: 0 } });
     if (!res.ok) return [];
     const payload = await res.json();
-    const items = Array.isArray(payload)
-      ? payload
-      : Array.isArray(payload?.data)
-      ? payload.data
-      : Array.isArray(payload?.items)
-      ? payload.items
-      : [];
+    const items = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
 
-    return items.map((l: any) => ({
-      ...l,
-      images: (l.images || [])
-        .slice()
-        .sort((a: any, b: any) => (a?.order ?? 0) - (b?.order ?? 0)),
-    }));
+    return items.map((l: any) => {
+      const avatar = toAbsoluteApiUrl(l.owner_avatar_url || l.owner?.avatar_url || l.user?.avatar_url);
+      // ścieżka do profilu właściciela – jeśli mamy slug lub id
+      const slug = l.owner?.slug || l.user?.slug;
+      const ownerId = l.owner?.id || l.user?.id;
+      const owner_profile_href = slug
+        ? `/u/${slug}`
+        : ownerId
+        ? `/u/${ownerId}`
+        : '';
+
+      return {
+        ...l,
+        images: (l.images || [])
+          .slice()
+          .sort((a: any, b: any) => (a?.order ?? 0) - (b?.order ?? 0))
+          .map((img: any) => ({ ...img, url: toAbsoluteApiUrl(img.url) })),
+        owner_avatar_url: avatar,
+        owner_profile_href,
+      };
+    });
   } catch {
     return [];
   }
 }
 
-/* ======================= PAGE ======================= */
+// Stabilne formatowanie daty (UTC), żeby nie powodować różnic SSR/CSR
+function formatDateUTC(iso: string) {
+  const d = iso.length <= 10 ? new Date(`${iso}T00:00:00Z`) : new Date(iso);
+  return new Intl.DateTimeFormat('pl-PL', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' }).format(d);
+}
 
-export default async function HomePage() {
-  const listings = await fetchListings(12);
+/* ======================= PAGE (DOMYŚLNY EKSPORT) ======================= */
 
-  // Sprzedaż: 4 szt. (grid)
-  const sale = listings.slice(0, 4);
-
-  // Wynajem: kolejne 4 szt. (list view)
-  const rent = listings.slice(4, 8);
+export default async function Page() {
+  const [saleListings, rentListings] = await Promise.all([
+    fetchListings({ offer_type: 'sprzedaz', limit: 4 }),
+    fetchListings({ offer_type: 'wynajem', limit: 4 }),
+  ]);
 
   return (
     <main className="space-y-16">
       <Hero />
       <CategoriesStrip />
 
-      {/* SPRZEDAŻ – 4, GRID */}
       <ListingsGrid
         title="Nowe nieruchomości na sprzedaż"
         subtitle="najnowsze okazje z całej Polski"
-        items={sale}
+        items={saleListings}
         moreHref="/ogloszenia?typ=sprzedaz"
       />
 
       <LocationsSection />
 
-      {/* WYNAJEM – 4, LIST (2x2 responsywnie) */}
       <ListingsList
         title="Nowe oferty do wynajęcia"
         subtitle="sprawdź aktualne ogłoszenia wynajmu"
-        items={rent}
+        items={rentListings}
         moreHref="/ogloszenia?typ=wynajem"
       />
 
       <TestimonialsSection />
       <CtaBanner />
-      <BlogSection />
+      <BlogSection formatDate={formatDateUTC} />
     </main>
   );
 }
@@ -78,7 +99,6 @@ function Hero() {
   return (
     <section className="relative isolate">
       <div className="absolute inset-0 overflow-hidden">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/hero.jpg"
           alt=""
@@ -113,18 +133,63 @@ function Hero() {
   );
 }
 
-/* ======================= KATEGORIE ======================= */
+/* ======================= WSPÓLNE: UNSPLASH + CSS FALLBACK ======================= */
 
-const CATEGORIES = [
-  { key: 'mieszkania', label: 'Mieszkania', img: '/categories/_mieszkania.jpg', count: 419 },
-  { key: 'domy', label: 'Domy', img: '/categories/_domy.jpg', count: 168 },
-  { key: 'dzialki', label: 'Działki', img: '/categories/_dzialki.jpg', count: 276 },
-  { key: 'garaze', label: 'Garaże', img: '/categories/_garaze.jpg', count: 3 },
-  { key: 'lokale', label: 'Lokale usługowe', img: '/categories/_lokale.jpg', count: 67 },
-  { key: 'hale', label: 'Hale', img: '/categories/_hale.jpg', count: 22 },
-  { key: 'hotele', label: 'Hotele i pensjonaty', img: '/categories/_hotele.jpg', count: 3 },
-  { key: 'palace', label: 'Pałace', img: '/categories/_palace.jpg', count: 1 },
+const unsplash = (q: string, w = 1200, h = 800, sig = 1) =>
+  `https://source.unsplash.com/${w}x${h}/?${encodeURIComponent(q)}&sig=${sig}`;
+
+function bgWithFallback(primaryUrls: string[], fallbackUrl: string) {
+  const parts = [...primaryUrls.map((u) => `url("${u}")`), `url("${fallbackUrl}")`];
+  return parts.join(', ');
+}
+
+/* ======================= KATEGORIE – równe kafle (16:9) ======================= */
+
+type Category = {
+  key: string;
+  label: string;
+  fallback: string;
+  queries: string[];
+  count: number;
+};
+
+const CATEGORIES: Category[] = [
+  { key: 'mieszkania', label: 'Mieszkania',           fallback: '/categories/_mieszkania.jpg', queries: ['apartment interior modern', 'minimal living room'], count: 419 },
+  { key: 'domy',       label: 'Domy',                 fallback: '/categories/_domy.jpg',       queries: ['modern house architecture', 'scandinavian house exterior'], count: 168 },
+  { key: 'dzialki',    label: 'Działki',              fallback: '/categories/_dzialki.jpg',    queries: ['land plot meadow', 'green field acreage'], count: 276 },
+  { key: 'garaze',     label: 'Garaże',               fallback: '/categories/_garaze.jpg',     queries: ['garage parking storage', 'garage doors exterior'], count: 3 },
+  { key: 'lokale',     label: 'Lokale usługowe',      fallback: '/categories/_lokale.jpg',     queries: ['retail storefront interior', 'office workspace interior'], count: 67 },
+  { key: 'hale',       label: 'Hale',                 fallback: '/categories/_hale.jpg',       queries: ['warehouse industrial logistics', 'warehouse interior storage'], count: 22 },
+  { key: 'hotele',     label: 'Hotele i pensjonaty',  fallback: '/categories/_hotele.jpg',     queries: ['hotel lobby resort', 'boutique hotel interior'], count: 3 },
+  { key: 'palace',     label: 'Pałace',               fallback: '/categories/_palace.jpg',     queries: ['palace chateau castle', 'manor estate classic'], count: 1 },
 ];
+
+function CategoryTile({ c }: { c: Category }) {
+  const urls = [unsplash(c.queries[0], 1200, 800, 1), unsplash(c.queries[1] || c.queries[0], 1200, 800, 2)];
+  return (
+    <Link
+      href={`/kategorie/${c.key}`}
+      className="relative overflow-hidden rounded-2xl border bg-white shadow-sm hover:shadow-md transition"
+      aria-label={`Przeglądaj kategorię: ${c.label}`}
+    >
+      <div className="aspect-[16/9]" />
+      <div
+        className="absolute inset-0 bg-center bg-cover"
+        style={{ backgroundImage: bgWithFallback(urls, c.fallback) }}
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/20 to-transparent" />
+      <div className="absolute inset-0 ring-1 ring-inset ring-white/10" />
+      <div className="absolute left-3 right-3 bottom-3 flex items-end justify-between gap-2">
+        <div className="inline-flex items-center gap-2 rounded-xl bg-white/90 px-3 py-1.5 backdrop-blur">
+          <span className="text-sm font-semibold text-gray-900">{c.label}</span>
+        </div>
+        <div className="rounded-xl bg-black/60 px-2.5 py-1 text-[11px] font-medium text-white">
+          {c.count} ogłoszeń
+        </div>
+      </div>
+    </Link>
+  );
+}
 
 function CategoriesStrip() {
   return (
@@ -134,24 +199,19 @@ function CategoriesStrip() {
         <p className="text-gray-600 mt-1">przeglądaj oferty wg rodzaju</p>
       </div>
 
-      <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory">
-        {CATEGORIES.map((c) => (
-          <Link
-            key={c.key}
-            href={`/kategorie/${c.key}`}
-            className="snap-start shrink-0 w-[180px]"
-          >
-            <div className="rounded-2xl border bg-white shadow-sm overflow-hidden hover:shadow-md transition">
-              <div className="h-24 w-full overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={c.img} alt="" className="w-full h-full object-cover" />
-              </div>
-              <div className="p-3">
-                <div className="font-semibold">{c.label}</div>
-                <div className="text-xs text-gray-500">{c.count} ogłoszeń</div>
-              </div>
+      <div className="-mx-4 px-4 md:hidden">
+        <div className="grid grid-flow-col auto-cols-[78%] sm:auto-cols-[60%] gap-4 overflow-x-auto pb-2 snap-x snap-mandatory">
+          {CATEGORIES.map((c) => (
+            <div key={c.key} className="snap-start">
+              <CategoryTile c={c} />
             </div>
-          </Link>
+          ))}
+        </div>
+      </div>
+
+      <div className="hidden md:grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4">
+        {CATEGORIES.map((c) => (
+          <CategoryTile c={c} key={c.key} />
         ))}
       </div>
     </section>
@@ -199,6 +259,8 @@ function ListingsGrid({
               region={l.address_region}
               images={l.images}
               offerType={l.offer_type}
+              ownerAvatarUrl={l.owner_avatar_url}
+              ownerProfileHref={l.owner_profile_href}
               view="grid"
             />
           ))}
@@ -239,7 +301,6 @@ function ListingsList({
       </div>
 
       {items?.length ? (
-        // 2x2 responsywnie
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {items.map((l: any) => (
             <ListingCard
@@ -252,6 +313,8 @@ function ListingsList({
               region={l.address_region}
               images={l.images}
               offerType={l.offer_type}
+              ownerAvatarUrl={l.owner_avatar_url}
+              ownerProfileHref={l.owner_profile_href}
               view="list"
             />
           ))}
@@ -265,71 +328,86 @@ function ListingsList({
   );
 }
 
-/* ======================= LOKALIZACJE / OPINIE / CTA / BLOG ======================= */
+/* ======================= LOKALIZACJE ======================= */
 
-const LOCATIONS = [
-  { key: 'warszawa', name: 'Warszawa', img: '/locations/warszawa.jpg', count: 80 },
-  { key: 'krakow', name: 'Kraków', img: '/locations/krakow.jpg', count: 73 },
-  { key: 'lodz', name: 'Łódź', img: '/locations/lodz.jpg', count: 23 },
-  { key: 'wroclaw', name: 'Wrocław', img: '/locations/wroclaw.jpg', count: 49 },
-  { key: 'poznan', name: 'Poznań', img: '/locations/poznan.jpg', count: 11 },
-  { key: 'gdansk', name: 'Gdańsk', img: '/locations/gdansk.jpg', count: 7 },
-  { key: 'szczecin', name: 'Szczecin', img: '/locations/szczecin.jpg', count: 9 },
-  { key: 'bialystok', name: 'Białystok', img: '/locations/bialystok.jpg', count: 3 },
+type LocationT = {
+  key: string;
+  name: string;
+  fallback: string;
+  queries: string[];
+  count: number;
+};
+
+const LOCATIONS: LocationT[] = [
+  { key: 'warszawa',  name: 'Warszawa',  fallback: '/locations/warszawa.jpg',  queries: ['warsaw skyline poland', 'warsaw old town'], count: 80 },
+  { key: 'krakow',    name: 'Kraków',    fallback: '/locations/krakow.jpg',    queries: ['krakow old town poland', 'krakow main square'], count: 73 },
+  { key: 'lodz',      name: 'Łódź',      fallback: '/locations/lodz.jpg',      queries: ['lodz architecture poland', 'lodz piotrkowska'], count: 23 },
+  { key: 'wroclaw',   name: 'Wrocław',   fallback: '/locations/wroclaw.jpg',   queries: ['wroclaw bridge poland', 'wroclaw old town'], count: 49 },
+  { key: 'poznan',    name: 'Poznań',    fallback: '/locations/poznan.jpg',    queries: ['poznan old town poland', 'poznan stary rynek'], count: 11 },
+  { key: 'gdansk',    name: 'Gdańsk',    fallback: '/locations/gdansk.jpg',    queries: ['gdansk harbor poland', 'gdansk old town'], count: 7 },
+  { key: 'szczecin',  name: 'Szczecin',  fallback: '/locations/szczecin.jpg',  queries: ['szczecin city poland', 'szczecin waly chrobrego'], count: 9 },
+  { key: 'bialystok', name: 'Białystok', fallback: '/locations/bialystok.jpg', queries: ['bialystok city poland', 'bialystok park'], count: 3 },
 ];
+
+function LocationTile({ l }: { l: LocationT }) {
+  const urls = [unsplash(l.queries[0], 1200, 800, 1), unsplash(l.queries[1] || l.queries[0], 1200, 800, 2)];
+  return (
+    <Link
+      href={`/lokalizacje/${l.key}`}
+      className="relative overflow-hidden rounded-2xl border bg-white shadow-sm hover:shadow-md transition"
+      aria-label={`Przeglądaj oferty: ${l.name}`}
+    >
+      <div className="aspect-[16/9]" />
+      <div
+        className="absolute inset-0 bg-center bg-cover"
+        style={{ backgroundImage: bgWithFallback(urls, l.fallback) }}
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/15 to-transparent" />
+      <div className="absolute inset-0 ring-1 ring-inset ring-white/10" />
+      <div className="absolute left-4 right-4 bottom-4 flex items-center justify-between">
+        <div className="rounded-xl bg-white/90 px-3 py-1.5 text-sm font-semibold text-gray-900 backdrop-blur">
+          {l.name}
+        </div>
+        <div className="rounded-xl bg-black/60 px-2.5 py-1 text-[11px] font-medium text-white">
+          {l.count} ogłoszeń
+        </div>
+      </div>
+    </Link>
+  );
+}
 
 function LocationsSection() {
   return (
     <section className="container-page">
       <div className="text-center mb-8 md:mb-10">
         <h2 className="text-2xl md:text-3xl font-bold">Popularne lokalizacje</h2>
-        <p className="text-gray-600 mt-1">sprawdź oferty w wybranym mieście</p>
       </div>
 
-      <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory">
-        {LOCATIONS.map((l) => (
-          <Link key={l.key} href={`/lokalizacje/${l.key}`} className="snap-start shrink-0 w-[220px]">
-            <div className="rounded-2xl border bg-white shadow-sm overflow-hidden hover:shadow-md transition">
-              <div className="h-28 w-full overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={l.img} alt="" className="w-full h-full object-cover" />
-              </div>
-              <div className="p-3">
-                <div className="font-semibold">{l.name}</div>
-                <div className="text-xs text-gray-500">{l.count} ogłoszeń</div>
-              </div>
+      <div className="-mx-4 px-4 md:hidden">
+        <div className="grid grid-flow-col auto-cols-[78%] sm:auto-cols-[60%] gap-4 overflow-x-auto pb-2 snap-x snap-mandatory">
+          {LOCATIONS.map((l) => (
+            <div key={l.key} className="snap-start">
+              <LocationTile l={l} />
             </div>
-          </Link>
+          ))}
+        </div>
+      </div>
+
+      <div className="hidden md:grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4">
+        {LOCATIONS.map((l) => (
+          <LocationTile l={l} key={l.key} />
         ))}
       </div>
     </section>
   );
 }
 
-/* ======================= TESTIMONIALS ======================= */
+/* ======================= TESTIMONIALS / CTA / BLOG ======================= */
 
 const TESTIMONIALS = [
-  {
-    name: 'Alicja Szczygieł',
-    role: 'agent nieruchomości',
-    text:
-      'Jako agent nieruchomości uważam, że Houser.pl to świetne narzędzie – oferty prezentują się nowocześnie i mają duże zasięgi.',
-    avatar: '/avatars/f1.jpg',
-  },
-  {
-    name: 'Michał Wojdenko',
-    role: 'deweloper',
-    text:
-      'Dodawanie i zarządzanie ogłoszeniami jest banalnie proste. Dostajemy wartościowe leady, a panel jest intuicyjny.',
-    avatar: '/avatars/m1.jpg',
-  },
-  {
-    name: 'Krzysztof Zdzanowski',
-    role: 'przedsiębiorca',
-    text:
-      'Przejrzałem mnóstwo serwisów – tu filtrowanie i mapa robią robotę. Finalnie kupiłem mieszkanie z oferty znalezionej na Houser.pl.',
-    avatar: '/avatars/m2.jpg',
-  },
+  { name: 'Alicja Szczygieł', role: 'agent nieruchomości', text: 'Jako agent nieruchomości uważam, że Houser.pl to świetne narzędzie – oferty prezentują się nowocześnie i mają duże zasięgi.', avatar: '/avatars/f1.jpg' },
+  { name: 'Michał Wojdenko', role: 'deweloper', text: 'Dodawanie i zarządzanie ogłoszeniami jest banalnie proste. Dostajemy wartościowe leady, a panel jest intuicyjny.', avatar: '/avatars/m1.jpg' },
+  { name: 'Krzysztof Zdzanowski', role: 'przedsiębiorca', text: 'Przejrzałem mnóstwo serwisów – tu filtrowanie i mapa robią robotę. Finalnie kupiłem mieszkanie z oferty znalezionej na Houser.pl.', avatar: '/avatars/m2.jpg' },
 ];
 
 function TestimonialsSection() {
@@ -341,13 +419,9 @@ function TestimonialsSection() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {TESTIMONIALS.map((t, i) => (
-          <div
-            key={i}
-            className="rounded-2xl border bg-white p-5 shadow-sm hover:shadow-md transition"
-          >
+          <div key={i} className="rounded-2xl border bg-white p-5 shadow-sm hover:shadow-md transition">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-100">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={t.avatar} alt={t.name} className="h-full w-full object-cover" />
               </div>
               <div>
@@ -363,24 +437,15 @@ function TestimonialsSection() {
   );
 }
 
-/* ======================= CTA BANNER ======================= */
-
 function CtaBanner() {
   return (
     <section className="bg-brand-900">
       <div className="container-page py-10 md:py-14 text-white grid md:grid-cols-[1fr_auto] gap-6 items-center">
         <div>
-          <h3 className="text-2xl md:text-3xl font-bold">
-            Zacznij sprzedawać i wynajmować nieruchomości z Houser.pl
-          </h3>
-          <p className="text-white/80 mt-2 max-w-2xl">
-            Dodawaj ogłoszenia, zarządzaj ofertami i docieraj do tysięcy użytkowników z całej Polski.
-          </p>
+          <h3 className="text-2xl md:text-3xl font-bold">Zacznij sprzedawać i wynajmować nieruchomości z Houser.pl</h3>
+          <p className="text-white/80 mt-2 max-w-2xl">Dodawaj ogłoszenia, zarządzaj ofertami i docieraj do tysięcy użytkowników z całej Polski.</p>
         </div>
-        <Link
-          href="/dodaj-ogloszenie"
-          className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-brand-900 shadow-soft hover:bg-gray-50"
-        >
+        <Link href="/dodaj-ogloszenie" className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-brand-900 shadow-soft hover:bg-gray-50">
           Rozpocznij →
         </Link>
       </div>
@@ -388,40 +453,14 @@ function CtaBanner() {
   );
 }
 
-/* ======================= BLOG ======================= */
-
 const BLOG = [
-  {
-    slug: 'wynajem-biura-w-polsce',
-    title: 'Wynajem biura w Polsce – porównanie ofert z największych',
-    date: '2025-07-24',
-    category: 'Rynek nieruchomości',
-    img: '/blog/b1.jpg',
-  },
-  {
-    slug: 'ekskluzywne-nieruchomosci',
-    title: 'Ekskluzywne nieruchomości – inwestycja w prestiż i przyszłość',
-    date: '2025-06-09',
-    category: 'Blog',
-    img: '/blog/b2.jpg',
-  },
-  {
-    slug: 'prognozy-rynku-2025',
-    title: 'Prognozy na rynku nieruchomości w 2025 roku',
-    date: '2025-05-29',
-    category: 'Rynek nieruchomości',
-    img: '/blog/b3.jpg',
-  },
-  {
-    slug: 'jakie-rnny-najlepsze',
-    title: 'Jakie rynny będą najlepsze dla Twojego domu?',
-    date: '2025-02-12',
-    category: 'Porady',
-    img: '/blog/b4.jpg',
-  },
+  { slug: 'wynajem-biura-w-polsce', title: 'Wynajem biura w Polsce – porównanie ofert z największych', date: '2025-07-24', category: 'Rynek nieruchomości', img: '/blog/b1.jpg' },
+  { slug: 'ekskluzywne-nieruchomosci', title: 'Ekskluzywne nieruchomości – inwestycja w prestiż i przyszłość', date: '2025-06-09', category: 'Blog', img: '/blog/b2.jpg' },
+  { slug: 'prognozy-rynku-2025', title: 'Prognozy na rynku nieruchomości w 2025 roku', date: '2025-05-29', category: 'Rynek nieruchomości', img: '/blog/b3.jpg' },
+  { slug: 'jakie-rnny-najlepsze', title: 'Jakie rynny będą najlepsze dla Twojego domu?', date: '2025-02-12', category: 'Porady', img: '/blog/b4.jpg' },
 ];
 
-function BlogSection() {
+function BlogSection({ formatDate }: { formatDate: (d: string) => string }) {
   return (
     <section className="container-page">
       <div className="mb-4 md:mb-6 flex items-end justify-between gap-4">
@@ -445,7 +484,6 @@ function BlogSection() {
             className="rounded-2xl border bg-white overflow-hidden shadow-sm hover:shadow-md transition"
           >
             <div className="h-36 w-full overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={p.img} alt="" className="w-full h-full object-cover" />
             </div>
             <div className="p-4 space-y-2">
@@ -454,7 +492,7 @@ function BlogSection() {
               </div>
               <div className="font-semibold line-clamp-2">{p.title}</div>
               <div className="text-xs text-gray-500">
-                {new Date(p.date).toLocaleDateString('pl-PL')}
+                {formatDate(p.date)}
               </div>
             </div>
           </Link>

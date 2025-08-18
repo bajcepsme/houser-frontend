@@ -6,28 +6,44 @@
 :root{
   --brand-primary: #2563eb;
   --brand-secondary: #f97316;
-  --brand-bg: #f8fafc;
+
+  /* Ujednolicenie: używamy obu, aby było kompatybilnie z kodem */
+  --brand-page-bg: #f8fafc;
+  --brand-bg: var(--brand-page-bg);
+
   --brand-header-bg: #ffffff;
   --brand-text: #111827;
   --brand-radius: 12px;
 
   /* Listing cards (opcjonalne, ustawiane przez applyBrandToHtml) */
+  --lc-grid-bg: #ffffff;
   --lc-grid-radius: 16px;
   --lc-grid-shadow: 0 1px 2px rgba(0,0,0,.06);
   --lc-grid-border: 1px solid rgba(0,0,0,.08);
-  --lc-grid-price-bg: #f59e0b;
 
+  --lc-list-bg: #ffffff;
   --lc-list-radius: 16px;
   --lc-list-shadow: 0 1px 2px rgba(0,0,0,.06);
   --lc-list-border: 1px solid rgba(0,0,0,.08);
-  --lc-list-price-bg: #f59e0b;
+
+  /* Domyślne HR (nadpisywane z brand.ts) */
+  --lc-grid-hr-show: 0;
+  --lc-grid-hr-color: rgba(17,24,39,.12);
+  --lc-grid-hr-thickness: 1px;
+  --lc-grid-hr-mt: 10px;
+  --lc-grid-hr-mb: 10px;
+  --lc-grid-hr-pt: 0px;
+  --lc-grid-hr-pb: 0px;
+
+  /* Avatar visibility: 1 => pełna nieprzezroczystość */
+  --lc-grid-avatar-show: 1;
 }
 
 /* ========= Global base ========= */
 html, body { height: 100%; }
 body{
-  /* WYMUSZAMY tło i kolor z brandu */
-  background: var(--brand-bg) !important;
+  /* tło i kolor z brandu – obsługa obu nazw zmiennej */
+  background: var(--brand-page-bg, var(--brand-bg)) !important;
   color: var(--brand-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -39,7 +55,7 @@ body{
   color: var(--brand-primary);
 }
 
-/* ========= Twoje skróty/wzorce (jeśli ich używasz gdzie indziej) ========= */
+/* ========= Skróty ========= */
 .container-page{ @apply mx-auto max-w-7xl px-4 md:px-6; }
 .input-modern{
   @apply w-full rounded-xl border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 outline-none ring-0
@@ -56,25 +72,24 @@ body{
          px-4 py-2 text-sm text-gray-800 hover:bg-gray-50;
 }
 
-/* delikatny cień */
 .shadow-soft{ box-shadow: 0 6px 20px rgba(0,0,0,.06); }
-
-/* Karty (uniwersalne) */
 .card{ @apply rounded-2xl border border-gray-200 bg-white; }
 
-/* (opcjonalnie) Listing Card – jeżeli chcesz korzystać z CSS variables zamiast klas */
+/* Listing Card – jeżeli korzystasz z CSS variables */
 .lc-grid{
   border: var(--lc-grid-border);
   box-shadow: var(--lc-grid-shadow);
   border-radius: var(--lc-grid-radius);
+  background: var(--lc-grid-bg);
 }
 .lc-list{
   border: var(--lc-list-border);
   box-shadow: var(--lc-list-shadow);
   border-radius: var(--lc-list-radius);
+  background: var(--lc-list-bg);
 }
 
 /* upewniamy się, że nic nie przycina */
 .custom-select-wrapper { position: relative; z-index: 60; }
 .custom-options { z-index: 60; }
-.loc-list { z-index: 70; }          /* lista podpowiedzi z SearchBar */
+.loc-list { z-index: 70; }
