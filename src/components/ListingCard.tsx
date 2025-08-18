@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import * as React from 'react';
 import { Camera, MapPin, Heart } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 type ImageT = { url: string; alt?: string };
 type View = 'grid' | 'list';
@@ -17,7 +18,8 @@ export default function ListingCard({
   images = [],
   offerType,
   ownerAvatarUrl,
-  ownerProfileHref, // opcjonalny href do profilu właściciela
+  ownerProfileHref,
+  ownerId,               // <-- UŻYWAMY TEGO
   view = 'grid',
 }: {
   id: number | string;
@@ -31,29 +33,52 @@ export default function ListingCard({
   ownerAvatarUrl?: string | null;
   ownerProfileHref?: string;
   view?: View;
+  ownerId?: number | string;   // <-- już było w typie, teraz realnie wykorzystywane
 }) {
   const href = `/ogloszenia/${id}`;
   const P = view === 'grid' ? '--lc-grid' : '--lc-list';
   const imgUrl = images[0]?.url || '/no-image.jpg';
   const imgCount = images.length || 1;
 
-  // stała szerokość kolumny obrazka w LIST view (zgodnie z poprzednim zachowaniem)
-  const LIST_IMG_COL = '200px';
-
-  // pomocnicze
   const pricePerM2 = calcPricePerM2(price, area);
 
+  // === NOWE: fallback do avatara zalogowanego usera, jeśli to jego ogłoszenie ===
+  const { user } = useAuth();
+  const resolvedOwnerAvatar = React.useMemo(() => {
+    // 1) jeśli przyszło coś z serwera – normalizujemy i zwracamy
+    const fromProps = absolutize(ownerAvatarUrl || '');
+    if (fromProps) return fromProps;
+
+    // 2) jeśli listing należy do zalogowanego usera – użyj jego zdjęcia z AuthContext
+    const uid = ownerId != null ? String(ownerId) : '';
+    const ctxId = (user?.id != null) ? String(user.id) : '';
+    if (uid && ctxId && uid === ctxId) {
+      const ctxRaw =
+        (user as any)?.avatar_url ||
+        (user as any)?.avatar ||
+        (user as any)?.photo_url ||
+        '';
+      const fromCtx = absolutize(ctxRaw);
+      if (fromCtx) return fromCtx;
+    }
+
+    // 3) brak danych – zostaw pusty, poniżej pójdzie default
+    return '';
+  }, [ownerAvatarUrl, ownerId, user]);
+
+  const finalAvatarSrc = resolvedOwnerAvatar || '/avatars/default.jpg';
+
   return (
-<article
-  className={
-    view === 'grid'
-      ? 'listing-card group relative overflow-hidden rounded-2xl border bg-white shadow-sm transition'
-      : 'listing-card group grid gap-0 overflow-hidden rounded-2xl border bg-white shadow-sm transition'
-  }
-  data-view={view}
-  style={view === 'list' ? { gridTemplateColumns: `${LIST_IMG_COL} 1fr` } : undefined}
->
-      {/* OBRAZ (link do ogłoszenia) */}
+    <article
+      className={
+        view === 'grid'
+          ? 'listing-card group relative overflow-hidden rounded-2xl border bg-white shadow-sm transition'
+          : 'listing-card group grid gap-0 overflow-hidden rounded-2xl border bg-white shadow-sm transition'
+      }
+      data-view={view}
+      style={view === 'list' ? { gridTemplateColumns: `200px 1fr` } : undefined}
+    >
+      {/* OBRAZ */}
       <Link
         href={href}
         className="relative block overflow-hidden"
@@ -63,10 +88,7 @@ export default function ListingCard({
         <img src={imgUrl} alt={title} className="h-full w-full object-cover" />
 
         {/* CHIP */}
-        <div
-          className="absolute left-0 right-0 top-2 flex px-2"
-          style={{ justifyContent: `var(${P}-chip-justify)` as any }}
-        >
+        <div className="absolute left-0 right-0 top-2 flex px-2" style={{ justifyContent: `var(${P}-chip-justify)` as any }}>
           <span
             className="inline-flex items-center font-semibold"
             style={{
@@ -95,7 +117,7 @@ export default function ListingCard({
           <span>{imgCount}</span>
         </div>
 
-        {/* FAV (styl z brandu) */}
+        {/* FAV */}
         <div className="absolute right-2 top-2">
           <button
             type="button"
@@ -117,15 +139,15 @@ export default function ListingCard({
       </Link>
 
       {/* TREŚĆ */}
-<div
-  className="p-3 listing-card__body"
-  style={{
-    background: `var(${P}-bg)`,
-    boxShadow: `var(${P}-shadow)`,
-    borderRadius: `var(${P}-radius)`,
-  }}
->
-        {/* TYTUŁ – link do ogłoszenia */}
+      <div
+        className="p-3 listing-card__body"
+        style={{
+          background: `var(${P}-bg)`,
+          boxShadow: `var(${P}-shadow)`,
+          borderRadius: `var(${P}-radius)`,
+        }}
+      >
+        {/* TYTUŁ */}
         <Link
           href={href}
           className="line-clamp-2 text-gray-900 hover:underline"
@@ -156,13 +178,7 @@ export default function ListingCard({
         </div>
 
         {/* CENA */}
-        <div
-          className="flex items-center"
-          style={{
-            justifyContent: `var(${P}-price-justify)` as any,
-            marginTop: `var(${P}-price-mt)`,
-          }}
-        >
+        <div className="flex items-center" style={{ justifyContent: `var(${P}-price-justify)` as any, marginTop: `var(${P}-price-mt)` }}>
           <span
             className="inline-flex rounded-md"
             style={{
@@ -177,7 +193,7 @@ export default function ListingCard({
           </span>
         </div>
 
-        {/* HR – sterowany brandingiem (gdy hrShow=0 => wszystko ma 0) */}
+        {/* HR */}
         <div
           aria-hidden
           style={{
@@ -192,14 +208,8 @@ export default function ListingCard({
         />
 
         {/* META + AVATAR */}
-        <div
-          className="flex items-center justify-between gap-3"
-          style={{ marginTop: `var(${P}-meta-mt)` }}
-        >
-          <div
-            className="flex gap-2"
-            style={{ justifyContent: `var(${P}-meta-justify)` as any }}
-          >
+        <div className="flex items-center justify-between gap-3" style={{ marginTop: `var(${P}-meta-mt)` }}>
+          <div className="flex gap-2" style={{ justifyContent: `var(${P}-meta-justify)` as any }}>
             {area ? (
               <span
                 className="inline-flex"
@@ -233,12 +243,11 @@ export default function ListingCard({
             ) : null}
           </div>
 
-          {/* AVATAR – link do profilu (jeśli jest href), pointer na hover; fallback tylko gdy brak własnego */}
-          {renderAvatar({ P, ownerAvatarUrl: ownerAvatarUrl || undefined, ownerProfileHref })}
+          {/* AVATAR */}
+          {renderAvatar({ P, src: finalAvatarSrc, ownerProfileHref })}
         </div>
       </div>
 
-      {/* Interakcje (fav + hover karty) */}
       <style>{`
         .brand-fav-btn[data-scope="grid"]:hover{
           background: var(--lc-grid-fav-bg-hover); color: var(--lc-grid-fav-color-hover);
@@ -263,20 +272,18 @@ export default function ListingCard({
 
 function renderAvatar({
   P,
-  ownerAvatarUrl,
+  src,
   ownerProfileHref,
 }: {
   P: string;
-  ownerAvatarUrl?: string;
+  src: string;
   ownerProfileHref?: string;
 }) {
   const DEFAULT_AVATAR = '/avatars/default.jpg';
-  // pokaż avatar właściciela, fallback tylko na błąd ładowania lub gdy url pusty
-  const src = ownerAvatarUrl && ownerAvatarUrl.trim().length > 0 ? ownerAvatarUrl : DEFAULT_AVATAR;
 
   const imgEl = (
     <img
-      src={src}
+      src={src || DEFAULT_AVATAR}
       onError={(e) => {
         (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR;
       }}
@@ -304,13 +311,10 @@ function renderAvatar({
         {imgEl}
       </Link>
     );
-    }
+  }
+
   return (
-    <div
-      className="shrink-0 overflow-hidden rounded-full ring-1 ring-black/5"
-      style={commonStyle}
-      title="Avatar"
-    >
+    <div className="shrink-0 overflow-hidden rounded-full ring-1 ring-black/5" style={commonStyle} title="Avatar">
       {imgEl}
     </div>
   );
@@ -329,4 +333,18 @@ function calcPricePerM2(price?: number | string, area?: number | string) {
   if (!Number.isFinite(nPrice) || !Number.isFinite(nArea) || nArea <= 0) return '';
   const val = Math.round(nPrice / nArea);
   return val.toLocaleString('pl-PL');
+}
+
+function apiBase() {
+  return (process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
+}
+
+function absolutize(path: string) {
+  if (!path) return '';
+  if (/^(data:|blob:|https?:\/\/)/i.test(path)) return path;
+  // usuń wiodące slashe
+  let p = path.replace(/^\/+/, '');
+  // avatars/... -> storage/avatars/...
+  if (p.startsWith('avatars/')) p = `storage/${p}`;
+  return `${apiBase()}/${p}`;
 }

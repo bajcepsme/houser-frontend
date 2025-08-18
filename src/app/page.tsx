@@ -2,19 +2,65 @@
 import Link from 'next/link';
 import SearchBar from '@/components/SearchBar';
 import ListingCard from '@/components/ListingCard';
-import BrandHeading from '@/components/BrandHead';
 
 /* ======================= DATA HELPERS ======================= */
 
+/** Absolutny URL do API (dla ścieżek względnych) */
 function toAbsoluteApiUrl(path?: string | null): string {
   if (!path) return '';
   const apiBase = (process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
-  if (path.startsWith('http://') || path.startsWith('https://')) {
-    return path;
-  }
-  return `${apiBase}${path.startsWith('/') ? '' : '/'}${path}`;
+  if (/^(data:|blob:|https?:\/\/)/i.test(path)) return path;
+  const p = path.startsWith('/') ? path : `/${path}`;
+  return `${apiBase}${p}`;
 }
 
+/** Avatar: normalizacja różnych formatów na absolutny URL API */
+function resolveApiAvatarUrl(raw?: string | null): string {
+  if (!raw) return '';
+  let s = String(raw).trim();
+  if (!s) return '';
+  // absolutne / data / blob — bez zmian
+  if (/^(data:|blob:|https?:\/\/)/i.test(s)) return s;
+
+  // usuń wiodące slashe
+  s = s.replace(/^\/+/, '');
+
+  // najczęstszy przypadek z backendu: "avatars/xyz.jpg" -> "storage/avatars/xyz.jpg"
+  if (s.startsWith('avatars/')) s = `storage/${s}`;
+  // jeśli już jest "storage/..." zostaw
+  // jeżeli backend zwróci coś innego (np. users/...), też zadziała jako /{cokolwiek}
+  return toAbsoluteApiUrl(`/${s}`);
+}
+
+/** Wybór pierwszego sensownego pola z rekordu ogłoszenia zawierającego avatar właściciela */
+function pickOwnerAvatar(listing: any): string {
+  const candidates = [
+    listing.owner_avatar_url,
+    listing.owner_avatar,
+
+    listing.owner?.avatar_url,
+    listing.owner?.avatar,
+    listing.owner?.photo_url,
+
+    listing.user?.avatar_url,
+    listing.user?.avatar,
+    listing.user?.photo_url,
+
+    listing.created_by?.avatar_url,
+    listing.created_by?.avatar,
+  ];
+
+  const first = candidates.find((v) => typeof v === 'string' && v.trim().length > 0);
+  return resolveApiAvatarUrl(first);
+}
+
+/** Stabilne formatowanie daty (UTC), żeby nie powodować różnic SSR/CSR */
+function formatDateUTC(iso: string) {
+  const d = iso.length <= 10 ? new Date(`${iso}T00:00:00Z`) : new Date(iso);
+  return new Intl.DateTimeFormat('pl-PL', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' }).format(d);
+}
+
+/** Pobranie ogłoszeń i mapowanie pól na to czego oczekuje ListingCard */
 async function fetchListings({ offer_type, limit }: { offer_type: 'sprzedaz' | 'wynajem'; limit: number }) {
   const base = (process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
   const url = `${base}/api/v1/listings?limit=${limit}&offer_type=${offer_type}`;
@@ -26,15 +72,15 @@ async function fetchListings({ offer_type, limit }: { offer_type: 'sprzedaz' | '
     const items = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
 
     return items.map((l: any) => {
-      const avatar = toAbsoluteApiUrl(l.owner_avatar_url || l.owner?.avatar_url || l.user?.avatar_url);
+      // avatar właściciela → absolutny URL
+      const avatar = pickOwnerAvatar(l);
+
       // ścieżka do profilu właściciela – jeśli mamy slug lub id
       const slug = l.owner?.slug || l.user?.slug;
-      const ownerId = l.owner?.id || l.user?.id;
-      const owner_profile_href = slug
-        ? `/u/${slug}`
-        : ownerId
-        ? `/u/${ownerId}`
-        : '';
+      const ownerId =
+  l.owner_id ?? l.user_id ?? l.created_by_id ??
+  l.owner?.id ?? l.user?.id ?? l.created_by?.id ?? null;
+      const owner_profile_href = slug ? `/u/${slug}` : ownerId ? `/u/${ownerId}` : '';
 
       return {
         ...l,
@@ -44,17 +90,12 @@ async function fetchListings({ offer_type, limit }: { offer_type: 'sprzedaz' | '
           .map((img: any) => ({ ...img, url: toAbsoluteApiUrl(img.url) })),
         owner_avatar_url: avatar,
         owner_profile_href,
+        ownerId,                         // <-- DODANE
       };
     });
   } catch {
     return [];
   }
-}
-
-// Stabilne formatowanie daty (UTC), żeby nie powodować różnic SSR/CSR
-function formatDateUTC(iso: string) {
-  const d = iso.length <= 10 ? new Date(`${iso}T00:00:00Z`) : new Date(iso);
-  return new Intl.DateTimeFormat('pl-PL', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' }).format(d);
 }
 
 /* ======================= PAGE (DOMYŚLNY EKSPORT) ======================= */
@@ -261,6 +302,7 @@ function ListingsGrid({
               offerType={l.offer_type}
               ownerAvatarUrl={l.owner_avatar_url}
               ownerProfileHref={l.owner_profile_href}
+              ownerId={l.owner?.id || l.user?.id || l.user_id || l.owner_id || l.created_by_id}
               view="grid"
             />
           ))}
@@ -315,6 +357,7 @@ function ListingsList({
               offerType={l.offer_type}
               ownerAvatarUrl={l.owner_avatar_url}
               ownerProfileHref={l.owner_profile_href}
+              ownerId={l.owner?.id || l.user?.id || l.user_id || l.owner_id || l.created_by_id}
               view="list"
             />
           ))}

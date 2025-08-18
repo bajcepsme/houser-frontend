@@ -1,13 +1,15 @@
+// src/app/layout.tsx
 import './globals.css';
-import type { Metadata } from 'next';
-import Header from '@/components/Header';
-import BrandBootstrap from '@/components/BrandBootstrap';
 import AppProviders from '@/components/AppProviders';
+import BrandBootstrap from '@/components/BrandBootstrap';
 import BrandMetadataClient from '@/components/BrandMetadataClient';
+import Header from '@/components/Header';
+import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Houser.pl',
-  description: 'Nowoczesny serwis nieruchomości',
+  // 👇 NIE ustawiamy title/description tutaj – steruje tym BrandMetadataClient
+  icons: { icon: '/favicon.ico' },
+  viewport: 'width=device-width, initial-scale=1',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -16,7 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <AppProviders>
           <BrandBootstrap />
-          <BrandMetadataClient /> {/* zawsze client */}
+          <BrandMetadataClient />
           <Header />
           {children}
         </AppProviders>
