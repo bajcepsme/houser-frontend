@@ -80,7 +80,11 @@ async function fetchListings({ offer_type, limit }: { offer_type: 'sprzedaz' | '
       const ownerId =
   l.owner_id ?? l.user_id ?? l.created_by_id ??
   l.owner?.id ?? l.user?.id ?? l.created_by?.id ?? null;
-      const owner_profile_href = slug ? `/u/${slug}` : ownerId ? `/u/${ownerId}` : '';
+      const owner_profile_href = slug
+  ? `/profil/${slug}/`
+  : ownerId
+  ? `/profil/${ownerId}/`
+  : '';
 
       return {
         ...l,
