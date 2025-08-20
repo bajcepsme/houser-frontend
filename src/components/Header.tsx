@@ -4,10 +4,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, useReducedMotion, AnimatePresence, LayoutGroup } from 'framer-motion';
-import { Menu, X, Plus, User, LogOut, Settings } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toAbsoluteUrl } from '@/lib/url';
 import { loadBrandFromLocalStorage } from '@/lib/brand';
+import { Menu, X, Plus, User, Settings, Heart, LogOut as LogOutIcon } from 'lucide-react';
 
 /* ================= utils ================= */
 
@@ -251,6 +251,16 @@ function UserMenu() {
                 <User className="h-4 w-4" />
                 Moje konto
               </button>
+
+<button
+  role="menuitem"
+  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-800 hover:bg-black/[.03] focus-visible:bg-black/[.03] focus-visible:outline-none"
+  onClick={() => { setOpen(false); router.push('/ulubione'); }}
+>
+  <Heart className="h-4 w-4" />
+  Ulubione
+</button>
+
               <button
                 role="menuitem"
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-800 hover:bg-black/[.03] focus-visible:bg-black/[.03] focus-visible:outline-none"
@@ -265,7 +275,7 @@ function UserMenu() {
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 focus-visible:bg-red-50 focus-visible:outline-none"
                 onClick={async () => { setOpen(false); await logout?.(); router.push('/'); }}
               >
-                <LogOut className="h-4 w-4" />
+                <LogOutIcon className="h-4 w-4" />
                 Wyloguj
               </button>
             </div>

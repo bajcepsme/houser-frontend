@@ -1,12 +1,17 @@
 'use client';
 
-import * as React from 'react';
+import React from 'react';
 import { AuthProvider } from '@/contexts/AuthContext';
 
 /**
- * Miejsce na wszystkie klientowe providery (Auth, Theme itd.)
- * Dzięki temu Header (client) zawsze jest w AuthProvider.
+ * Jeśli używasz dodatkowych providerów (np. react-query, theme itp.),
+ * owiń nimi dzieci **wewnątrz** AuthProvider albo obok — ważne tylko,
+ * żeby AppProviders był komponentem klienckim.
  */
 export default function AppProviders({ children }: { children: React.ReactNode }) {
-  return <AuthProvider>{children}</AuthProvider>;
+  return (
+    <AuthProvider>
+      {children}
+    </AuthProvider>
+  );
 }

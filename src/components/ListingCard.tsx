@@ -4,6 +4,7 @@ import Link from 'next/link';
 import * as React from 'react';
 import { Camera, MapPin, Heart } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { isFavorite, toggleFavorite, subscribeFavorites } from '@/lib/favorites';
 
 type ImageT = { url: string; alt?: string };
 type View = 'grid' | 'list';
@@ -39,18 +40,23 @@ export default function ListingCard({
   const P = view === 'grid' ? '--lc-grid' : '--lc-list';
   const imgUrl = images[0]?.url || '/no-image.jpg';
   const imgCount = images.length || 1;
-
   const pricePerM2 = calcPricePerM2(price, area);
 
   const { user } = useAuth();
+
+  // Avatar właściciela – preferuj props, ewentualnie avatar bieżącego usera, jeżeli to jego ogłoszenie
   const resolvedOwnerAvatar = React.useMemo(() => {
     const fromProps = absolutize(ownerAvatarUrl || '');
     if (fromProps) return fromProps;
 
     const uid = ownerId != null ? String(ownerId) : '';
-    const ctxId = (user?.id != null) ? String(user.id) : '';
+    const ctxId = user?.id != null ? String(user.id) : '';
     if (uid && ctxId && uid === ctxId) {
-      const raw = (user as any)?.avatar_url || (user as any)?.avatar || (user as any)?.photo_url || '';
+      const raw =
+        (user as any)?.avatar_url ||
+        (user as any)?.avatar ||
+        (user as any)?.photo_url ||
+        '';
       const fromCtx = absolutize(raw);
       if (fromCtx) return fromCtx;
     }
@@ -58,6 +64,27 @@ export default function ListingCard({
   }, [ownerAvatarUrl, ownerId, user]);
 
   const finalAvatarSrc = resolvedOwnerAvatar || '/avatars/default.jpg';
+
+  /* ====== ULUBIONE: stan + subskrypcje ====== */
+  const [fav, setFav] = React.useState(false);
+
+  // ustaw na podstawie localStorage po zamontowaniu
+  React.useEffect(() => {
+    setFav(isFavorite(id));
+  }, [id]);
+
+  // subskrypcja globalnych zmian (inne karty/zakładki/komponenty)
+  React.useEffect(() => {
+    const off = subscribeFavorites(() => setFav(isFavorite(id)));
+    return off;
+  }, [id]);
+
+  const onFavClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const next = await toggleFavorite(id); // optymistyczne
+    setFav(next);
+  };
 
   return (
     <article
@@ -81,7 +108,7 @@ export default function ListingCard({
       >
         <img src={imgUrl} alt={title} className="h-full w-full object-cover" />
 
-        {/* CHIP */}
+        {/* CHIP (typ oferty) */}
         <div className="absolute left-0 right-0 top-2 flex px-2" style={{ justifyContent: `var(${P}-chip-justify)` as any }}>
           <span
             className="inline-flex items-center font-semibold"
@@ -116,23 +143,28 @@ export default function ListingCard({
           <span>{imgCount}</span>
         </div>
 
-        {/* FAV */}
+        {/* PRZYCISK ULUBIONYCH */}
         <div className="absolute right-2 top-2">
           <button
             type="button"
-            className="brand-fav-btn inline-flex items-center justify-center"
+            className="brand-fav-btn inline-flex items-center justify-center transition-transform"
             data-scope={view}
-            aria-label="Dodaj do ulubionych"
+            aria-label={fav ? 'Usuń z ulubionych' : 'Dodaj do ulubionych'}
+            aria-pressed={fav}
+            title={fav ? 'Usuń z ulubionych' : 'Dodaj do ulubionych'}
+            onClick={onFavClick}
+            onMouseDown={(e) => e.preventDefault()}
             style={{
               width: `var(${P}-fav-size, 36px)`,
               height: `var(${P}-fav-size, 36px)`,
               borderRadius: `var(${P}-fav-radius, 999px)`,
               boxShadow: `var(${P}-fav-shadow, 0 6px 16px rgba(2,6,23,.12))`,
-              background: `var(${P}-fav-bg)`,
-              color: `var(${P}-fav-color)`,
+              background: fav ? `var(${P}-fav-bg-active)` : `var(${P}-fav-bg)`,
+              color: fav ? `var(${P}-fav-color-active)` : `var(${P}-fav-color)`,
+              transform: fav ? 'scale(1.05)' : 'scale(1)',
             }}
           >
-            <Heart className="h-4 w-4" />
+            <Heart className="h-4 w-4" fill={fav ? 'currentColor' : 'none'} strokeWidth={fav ? 0 : 2} />
           </button>
         </div>
       </Link>
@@ -177,7 +209,13 @@ export default function ListingCard({
         </div>
 
         {/* CENA */}
-        <div className="flex items-center" style={{ justifyContent: `var(${P}-price-justify)` as any, marginTop: `var(${P}-price-mt)` }}>
+        <div
+          className="flex items-center"
+          style={{
+            justifyContent: `var(${P}-price-justify)` as any,
+            marginTop: `var(${P}-price-mt)`,
+          }}
+        >
           <span
             className="inline-flex rounded-md"
             style={{
@@ -234,7 +272,7 @@ export default function ListingCard({
                   fontSize: `var(${P}-meta-fs)`,
                   fontWeight: `var(${P}-meta-weight)` as any,
                   padding: `var(${P}-meta-py) var(${P}-meta-px)`,
-                  borderRadius: `var(${P}-meta-radius)`, /* ← tu była literówka */
+                  borderRadius: `var(${P}-meta-radius)`,
                 }}
               >
                 {pricePerM2} zł/m²
@@ -247,16 +285,24 @@ export default function ListingCard({
       </div>
 
       <style>{`
+        .brand-fav-btn[data-scope="grid"]{
+          background: var(--lc-grid-fav-bg); color: var(--lc-grid-fav-color);
+        }
         .brand-fav-btn[data-scope="grid"]:hover{
           background: var(--lc-grid-fav-bg-hover); color: var(--lc-grid-fav-color-hover);
         }
-        .brand-fav-btn[data-scope="grid"]:active{
+        .brand-fav-btn[data-scope="grid"]:active,
+        .brand-fav-btn[aria-pressed="true"][data-scope="grid"]{
           background: var(--lc-grid-fav-bg-active); color: var(--lc-grid-fav-color-active);
+        }
+        .brand-fav-btn[data-scope="list"]{
+          background: var(--lc-list-fav-bg); color: var(--lc-list-fav-color);
         }
         .brand-fav-btn[data-scope="list"]:hover{
           background: var(--lc-list-fav-bg-hover); color: var(--lc-list-fav-color-hover);
         }
-        .brand-fav-btn[data-scope="list"]:active{
+        .brand-fav-btn[data-scope="list"]:active,
+        .brand-fav-btn[aria-pressed="true"][data-scope="list"]{
           background: var(--lc-list-fav-bg-active); color: var(--lc-list-fav-color-active);
         }
         .listing-card{ will-change: transform; }
@@ -267,12 +313,22 @@ export default function ListingCard({
 }
 
 /* ===== helpers ===== */
-function renderAvatar({ P, src, ownerProfileHref }: { P: string; src: string; ownerProfileHref?: string; }) {
+function renderAvatar({
+  P,
+  src,
+  ownerProfileHref,
+}: {
+  P: string;
+  src: string;
+  ownerProfileHref?: string;
+}) {
   const DEFAULT_AVATAR = '/avatars/default.jpg';
   const imgEl = (
     <img
       src={src || DEFAULT_AVATAR}
-      onError={(e) => { (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR; }}
+      onError={(e) => {
+        (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR;
+      }}
       alt=""
       className="h-full w-full object-cover"
     />
@@ -285,12 +341,22 @@ function renderAvatar({ P, src, ownerProfileHref }: { P: string; src: string; ow
   };
   if (ownerProfileHref) {
     return (
-      <Link href={ownerProfileHref} className="shrink-0 overflow-hidden rounded-full ring-1 ring-black/5 cursor-pointer" style={commonStyle} aria-label="Profil właściciela" title="Zobacz profil">
+      <Link
+        href={ownerProfileHref}
+        className="shrink-0 overflow-hidden rounded-full ring-1 ring-black/5 cursor-pointer"
+        style={commonStyle}
+        aria-label="Profil właściciela"
+        title="Zobacz profil"
+      >
         {imgEl}
       </Link>
     );
   }
-  return <div className="shrink-0 overflow-hidden rounded-full ring-1 ring-black/5" style={commonStyle} title="Avatar">{imgEl}</div>;
+  return (
+    <div className="shrink-0 overflow-hidden rounded-full ring-1 ring-black/5" style={commonStyle} title="Avatar">
+      {imgEl}
+    </div>
+  );
 }
 
 function formatPrice(p?: number | string) {
@@ -299,6 +365,7 @@ function formatPrice(p?: number | string) {
   if (!Number.isFinite(n)) return String(p);
   return n.toLocaleString('pl-PL') + ' zł';
 }
+
 function calcPricePerM2(price?: number | string, area?: number | string) {
   const nPrice = typeof price === 'number' ? price : Number(price);
   const nArea = typeof area === 'number' ? area : Number(area);
@@ -306,9 +373,11 @@ function calcPricePerM2(price?: number | string, area?: number | string) {
   const val = Math.round(nPrice / nArea);
   return val.toLocaleString('pl-PL');
 }
+
 function apiBase() {
   return (process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
 }
+
 function absolutize(path: string) {
   if (!path) return '';
   if (/^(data:|blob:|https?:\/\/)/i.test(path)) return path;
