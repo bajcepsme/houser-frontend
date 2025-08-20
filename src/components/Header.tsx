@@ -1,6 +1,6 @@
 'use client';
 
-import * as React from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, useReducedMotion, AnimatePresence, LayoutGroup } from 'framer-motion';
@@ -9,19 +9,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toAbsoluteUrl } from '@/lib/url';
 import { loadBrandFromLocalStorage } from '@/lib/brand';
 
-/* =========================================================
-   U T I L S  &  H E L P E R S
-========================================================= */
+/* ================= utils ================= */
 
-function clsx(...a: (string | false | null | undefined)[]) {
-  return a.filter(Boolean).join(' ');
-}
+function clsx(...a: (string | false | null | undefined)[]) { return a.filter(Boolean).join(' '); }
 
 const DEFAULT_AVATAR_DARK =
   'data:image/svg+xml;utf8,' +
   encodeURIComponent(
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
-      <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <defs><linearGradient id="g" x1="0" y="0" x2="1" y="1">
         <stop offset="0" stop-color="#1f2937"/><stop offset="1" stop-color="#111827"/>
       </linearGradient></defs>
       <circle cx="48" cy="48" r="48" fill="url(#g)"/>
@@ -49,15 +45,12 @@ function resolveAvatarSrc(raw?: string | null): string {
 }
 
 function useScrolled(threshold = 10) {
-  const [scrolled, setScrolled] = React.useState(false);
-  React.useEffect(() => {
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
     let raf = 0;
     const onScroll = () => {
       cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const y = typeof window !== 'undefined' ? window.scrollY || 0 : 0;
-        setScrolled(y > threshold);
-      });
+      raf = requestAnimationFrame(() => setScrolled((window.scrollY || 0) > threshold));
     };
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -69,33 +62,17 @@ function useScrolled(threshold = 10) {
   return scrolled;
 }
 
-/* =========================================================
-   S U B - C O M P O N E N T S
-========================================================= */
+/* ================= subcomponents ================= */
 
-// Avatar z cache-busterem + lazy
-function Avatar({
-  name,
-  photoUrl,
-  size = 32,
-  cacheKey,
-}: {
-  name?: string | null;
-  photoUrl?: string | null;
-  size?: number;
-  cacheKey?: string | number | null;
-}) {
-  const [src, setSrc] = React.useState<string>(() => resolveAvatarSrc(photoUrl));
-  React.useEffect(() => setSrc(resolveAvatarSrc(photoUrl)), [photoUrl]);
+function Avatar({ name, photoUrl, size = 32, cacheKey }: { name?: string | null; photoUrl?: string | null; size?: number; cacheKey?: string | number | null; }) {
+  const [src, setSrc] = useState<string>(() => resolveAvatarSrc(photoUrl));
+  useEffect(() => setSrc(resolveAvatarSrc(photoUrl)), [photoUrl]);
 
   const isDataOrBlob = /^(data:|blob:)/i.test(src);
   const needsBuster = !isDataOrBlob && (/^https?:\/\//i.test(src) || src.startsWith('/'));
-  const finalSrc =
-    needsBuster && cacheKey != null
-      ? `${src}${src.includes('?') ? '&' : '?'}v=${encodeURIComponent(String(cacheKey))}`
-      : src;
-
+  const finalSrc = needsBuster && cacheKey != null ? `${src}${src.includes('?') ? '&' : '?'}v=${encodeURIComponent(String(cacheKey))}` : src;
   const isDefault = src.startsWith('data:');
+
   return (
     <img
       key={finalSrc}
@@ -110,21 +87,27 @@ function Avatar({
   );
 }
 
-// Brand logo + fallback + skeleton
 function Brand() {
-  const [brand, setBrand] = React.useState<{ title?: string | null; logo_url?: string | null; updated_at?: any } | null>(null);
-  const [loading, setLoading] = React.useState(true);
+  const [brand, setBrand] = useState<{ title?: string | null; logo_url?: string | null; updated_at?: any } | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const load = () => {
       const b = loadBrandFromLocalStorage() as any;
       setBrand(b || null);
       setLoading(false);
     };
     load();
+
     const onBrandUpdated = () => requestAnimationFrame(load);
-    window.addEventListener('houser:brand:updated', onBrandUpdated);
-    return () => window.removeEventListener('houser:brand:updated', onBrandUpdated);
+    const onStorage = (e: StorageEvent) => { if (e.key === 'houser.brand') load(); };
+
+    window.addEventListener('houser:brand:updated', onBrandUpdated as EventListener);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('houser:brand:updated', onBrandUpdated as EventListener);
+      window.removeEventListener('storage', onStorage);
+    };
   }, []);
 
   const src = resolveAssetSrc(brand?.logo_url);
@@ -151,7 +134,6 @@ function Brand() {
   );
 }
 
-// Animowany NavLink z „ink bar”
 function NavLink({ href, label }: { href: string; label: string }) {
   const path = usePathname();
   const active = path === href || (href !== '/' && path.startsWith(href));
@@ -160,7 +142,7 @@ function NavLink({ href, label }: { href: string; label: string }) {
       href={href}
       className={clsx(
         'relative inline-flex items-center rounded-full px-3.5 py-2 text-sm transition',
-        active ? 'text-gray-900' : 'text-gray-700 hover:bg-black/[.03] hover:shadow-sm'
+        active ? 'text-gray-900' : 'text-gray-700 hover:bg.black/[.03] hover:shadow-sm'.replace('.','')
       )}
     >
       {label}
@@ -177,7 +159,6 @@ function NavLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-// CTA z efektem „shine”
 function CtaAdd() {
   return (
     <Link
@@ -194,15 +175,14 @@ function CtaAdd() {
   );
 }
 
-// Dropdown użytkownika (focus mgmt, ESC, klik poza)
 function UserMenu() {
   const { user, logout } = useAuth();
   const router = useRouter();
-  const [open, setOpen] = React.useState(false);
-  const firstItemRef = React.useRef<HTMLButtonElement | null>(null);
-  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const firstItemRef = useRef<HTMLButtonElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
     const onClick = (e: MouseEvent) => {
@@ -211,7 +191,6 @@ function UserMenu() {
     };
     document.addEventListener('keydown', onKey);
     document.addEventListener('mousedown', onClick);
-    // focus pierwszy item
     setTimeout(() => firstItemRef.current?.focus(), 0);
     return () => {
       document.removeEventListener('keydown', onKey);
@@ -267,10 +246,7 @@ function UserMenu() {
                 ref={firstItemRef}
                 role="menuitem"
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-800 hover:bg-black/[.03] focus-visible:bg-black/[.03] focus-visible:outline-none"
-                onClick={() => {
-                  setOpen(false);
-                  router.push('/moje-konto');
-                }}
+                onClick={() => { setOpen(false); router.push('/moje-konto'); }}
               >
                 <User className="h-4 w-4" />
                 Moje konto
@@ -278,10 +254,7 @@ function UserMenu() {
               <button
                 role="menuitem"
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-800 hover:bg-black/[.03] focus-visible:bg-black/[.03] focus-visible:outline-none"
-                onClick={() => {
-                  setOpen(false);
-                  router.push('/ustawienia');
-                }}
+                onClick={() => { setOpen(false); router.push('/ustawienia'); }}
               >
                 <Settings className="h-4 w-4" />
                 Ustawienia
@@ -290,11 +263,7 @@ function UserMenu() {
               <button
                 role="menuitem"
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 focus-visible:bg-red-50 focus-visible:outline-none"
-                onClick={async () => {
-                  setOpen(false);
-                  await logout?.();
-                  router.push('/');
-                }}
+                onClick={async () => { setOpen(false); await logout?.(); router.push('/'); }}
               >
                 <LogOut className="h-4 w-4" />
                 Wyloguj
@@ -307,39 +276,22 @@ function UserMenu() {
   );
 }
 
-// Drawer mobilny (dialog + trap focus)
-function MobileDrawer({
-  open,
-  onClose,
-  children,
-}: {
-  open: boolean;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  const panelRef = React.useRef<HTMLDivElement | null>(null);
+function MobileDrawer({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode; }) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
-  // ESC + klik poza + prosty focus trap
-  React.useEffect(() => {
+  useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
       if (e.key === 'Tab') {
         const node = panelRef.current;
         if (!node) return;
-        const focusable = node.querySelectorAll<HTMLElement>(
-          'a[href],button:not([disabled]),textarea,input,select,[tabindex]:not([tabindex="-1"])'
-        );
+        const focusable = node.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),textarea,input,select,[tabindex]:not([tabindex="-1"])');
         if (!focusable.length) return;
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-          last.focus();
-          e.preventDefault();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          first.focus();
-          e.preventDefault();
-        }
+        if (e.shiftKey && document.activeElement === first) { last.focus(); e.preventDefault(); }
+        else if (!e.shiftKey && document.activeElement === last) { first.focus(); e.preventDefault(); }
       }
     };
     const onClick = (e: MouseEvent) => {
@@ -359,14 +311,7 @@ function MobileDrawer({
     <AnimatePresence>
       {open && (
         <>
-          <motion.div
-            key="backdrop"
-            className="fixed inset-0 z-50 bg-black/40"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            aria-hidden
-          />
+          <motion.div key="backdrop" className="fixed inset-0 z-50 bg-black/40" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} aria-hidden />
           <motion.div
             key="panel"
             role="dialog"
@@ -388,15 +333,13 @@ function MobileDrawer({
   );
 }
 
-/* =========================================================
-   M A I N   H E A D E R
-========================================================= */
+/* ================= main header ================= */
 
 export default function Header() {
   const { user } = useAuth();
   const pathname = usePathname();
   const reduced = useReducedMotion();
-  const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const scrolled = useScrolled(12);
 
   const headerVariants = {
@@ -404,39 +347,26 @@ export default function Header() {
     scrolled: { backgroundColor: 'rgba(255,255,255,1)', height: 60, boxShadow: '0 8px 24px rgba(0,0,0,0.05)' },
   } as const;
 
-  const [bgAlpha, setBgAlpha] = React.useState(0.25);
-React.useEffect(() => {
-  if (typeof window === 'undefined') return;
-  const onScroll = () => {
-    const y = window.scrollY || 0;
-    const a = Math.min(1, 0.25 + y / 120); // 0.25 -> 1.0 w okolicach 120px
-    setBgAlpha(a);
-  };
-  onScroll();
-  window.addEventListener('scroll', onScroll, { passive: true });
-  return () => window.removeEventListener('scroll', onScroll);
-}, []);
+  const [bgAlpha, setBgAlpha] = useState(0.25);
+  useEffect(() => {
+    const onScroll = () => setBgAlpha(Math.min(1, 0.25 + (window.scrollY || 0) / 120));
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   return (
     <>
-     <motion.header
-  variants={headerVariants}
-  animate={scrolled ? 'scrolled' : 'initial'}
-  transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 250, damping: 30 }}
-  className="fixed inset-x-0 top-0 z-[99999] ring-1 ring-black/5"
-  style={{
-    backgroundColor: `rgba(255,255,255,${bgAlpha})`, // 25% u góry hero → 100% poniżej
-    backdropFilter: 'blur(20px)',
-    WebkitBackdropFilter: 'blur(20px)',
-    isolation: 'isolate', // własny stacking context
-    pointerEvents: 'auto',
-  }}
->
+      <motion.header
+        variants={headerVariants}
+        animate={scrolled ? 'scrolled' : 'initial'}
+        transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 250, damping: 30 }}
+        className="fixed inset-x-0 top-0 z-[99999] ring-1 ring-black/5"
+        style={{ backgroundColor: `rgba(255,255,255,${bgAlpha})`, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', isolation: 'isolate', pointerEvents: 'auto' }}
+      >
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8" style={{ height: '100%' }}>
-          {/* Brand + nav */}
           <div className="flex items-center gap-4 md:gap-6">
             <Brand />
-
             <LayoutGroup id="main-nav">
               <nav className="hidden md:flex items-center gap-1.5">
                 <NavLink href="/ogloszenia" label="Ogłoszenia" />
@@ -448,11 +378,9 @@ React.useEffect(() => {
             </LayoutGroup>
           </div>
 
-          {/* CTA + user + hamburger */}
           <div className="flex items-center gap-2">
             <CtaAdd />
             <UserMenu />
-
             <button
               type="button"
               aria-label="Otwórz menu"
@@ -465,76 +393,40 @@ React.useEffect(() => {
         </div>
       </motion.header>
 
-      {/* Drawer mobilny */}
       <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-gray-700">Menu</span>
-          <button
-            aria-label="Zamknij menu"
-            className="rounded-lg p-2 text-gray-600 hover:bg-black/[.04] focus-visible:ring-2 focus-visible:ring-brand-500"
-            onClick={() => setDrawerOpen(false)}
-          >
+          <button aria-label="Zamknij menu" className="rounded-lg p-2 text-gray-600 hover:bg-black/[.04] focus-visible:ring-2 focus-visible:ring-brand-500" onClick={() => setDrawerOpen(false)}>
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Miejsce pod przyszłą wyszukiwarkę */}
         <div className="mt-4">
           <div className="h-10 w-full rounded-xl border border-gray-200 bg-white/80 ring-1 ring-white/50" aria-hidden />
         </div>
 
         <div className="mt-6 grid gap-1.5">
-          <Link
-            href="/ogloszenia"
-            onClick={() => setDrawerOpen(false)}
-            className={clsx(
-              'rounded-xl px-3 py-2 text-gray-800 hover:bg-black/[.03]',
-              pathname.startsWith('/ogloszenia') && 'bg-black/[.04] font-medium'
-            )}
-          >
-            Ogłoszenia
-          </Link>
-          <Link href="/kategorie" onClick={() => setDrawerOpen(false)} className="rounded-xl px-3 py-2 text-gray-800 hover:bg-black/[.03]">
-            Kategorie
-          </Link>
-          <Link href="/nowe-oferty" onClick={() => setDrawerOpen(false)} className="rounded-xl px-3 py-2 text-gray-800 hover:bg-black/[.03]">
-            Nowe oferty
-          </Link>
-          <Link href="/blog" onClick={() => setDrawerOpen(false)} className="rounded-xl px-3 py-2 text-gray-800 hover:bg-black/[.03]">
-            Blog
-          </Link>
-          {/* CTA w drawerze */}
-          <div className="pt-2">
-            <CtaAdd />
-          </div>
+          <Link href="/ogloszenia" onClick={() => setDrawerOpen(false)} className={clsx('rounded-xl px-3 py-2 text-gray-800 hover:bg-black/[.03]', pathname.startsWith('/ogloszenia') && 'bg-black/[.04] font-medium')}>Ogłoszenia</Link>
+          <Link href="/kategorie" onClick={() => setDrawerOpen(false)} className="rounded-xl px-3 py-2 text-gray-800 hover:bg-black/[.03]">Kategorie</Link>
+          <Link href="/nowe-oferty" onClick={() => setDrawerOpen(false)} className="rounded-xl px-3 py-2 text-gray-800 hover:bg-black/[.03]">Nowe oferty</Link>
+          <Link href="/blog" onClick={() => setDrawerOpen(false)} className="rounded-xl px-3 py-2 text-gray-800 hover:bg-black/[.03]">Blog</Link>
+          <div className="pt-2"><CtaAdd /></div>
         </div>
       </MobileDrawer>
 
-      {/* Style dla efektu shine na CTA */}
       <style jsx>{`
         .shine {
           position: absolute;
           inset: -200%;
-          background: linear-gradient(
-            115deg,
-            transparent 0%,
-            rgba(255, 255, 255, 0.55) 50%,
-            transparent 100%
-          );
+          background: linear-gradient(115deg, transparent 0%, rgba(255,255,255,.55) 50%, transparent 100%);
           transform: translateX(-60%);
           transition: transform 600ms ease;
           will-change: transform;
           pointer-events: none;
           mix-blend-mode: screen;
         }
-        :global(.group:hover .shine) {
-          transform: translateX(60%);
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .shine {
-            display: none;
-          }
-        }
+        :global(.group:hover .shine) { transform: translateX(60%); }
+        @media (prefers-reduced-motion: reduce) { .shine { display: none; } }
       `}</style>
     </>
   );

@@ -3,27 +3,38 @@
 /* ======================= Typy ======================= */
 
 export type Align3 = 'left' | 'center' | 'right';
+export type Corner = 'tl' | 'tr' | 'bl' | 'br';
 
 export type ListingCardBlock = {
+  /* Kontener karty */
   cardBg?: string;
   cardRadius?: number;
   cardPx?: number;
   cardPy?: number;
+  border?: string;
   shadow?: string;
 
+  /* Obraz + licznik */
   imgAspect?: string;
   imgCounterBg?: string;
   imgCounterColor?: string;
+  imgCounterFont?: number;  // px
+  imgCounterPx?: number;    // px (padding-x)
+  imgCounterPy?: number;    // px (padding-y)
+  imgCounterPos?: Corner;   // tl | tr | bl | br
 
+  /* Tytuł */
   titleSize?: number;
   titleWeight?: number;
   titleAlign?: Align3;
   titleMb?: number;
 
+  /* Adres */
   addressSize?: number;
   addressWeight?: number;
   addressMt?: number;
 
+  /* Cena */
   priceBg?: string;
   priceColor?: string;
   priceSize?: number;
@@ -33,6 +44,7 @@ export type ListingCardBlock = {
   pricePx?: number;
   pricePy?: number;
 
+  /* Chip */
   chipBg?: string;
   chipColor?: string;
   chipJustify?: Align3;
@@ -41,6 +53,7 @@ export type ListingCardBlock = {
   chipPy?: number;
   chipRadius?: number;
 
+  /* Meta */
   metaBg?: string;
   metaColor?: string;
   metaRadius?: number;
@@ -51,19 +64,21 @@ export type ListingCardBlock = {
   metaJustify?: Align3;
   metaMt?: number;
 
+  /* Separator (HR) */
   hrShow?: 0 | 1;
   hrColor?: string;
   hrThickness?: number;
-  /** NOWE: kontrola odstępów i paddingów poziomej linii */
   hrMt?: number;
   hrMb?: number;
   hrPt?: number;
   hrPb?: number;
 
+  /* Avatar właściciela */
   avatarShow?: 0 | 1;
   avatarSize?: number;
   avatarShadow?: string;
 
+  /* Fav */
   favBg?: string;
   favColor?: string;
   favBgHover?: string;
@@ -100,8 +115,16 @@ export type BrandPayload = {
 export const BRAND_STORAGE_KEY = 'houser.brand';
 export const BRAND_EVENT = 'houser:brand:updated';
 
-const JUSTIFY: Record<Align3, string> = { left: 'flex-start', center: 'center', right: 'flex-end' };
-const TEXT_ALIGN: Record<Align3, string> = { left: 'left', center: 'center', right: 'right' };
+const JUSTIFY: Record<Align3, string> = {
+  left: 'flex-start',
+  center: 'center',
+  right: 'flex-end',
+};
+const TEXT_ALIGN: Record<Align3, string> = {
+  left: 'left',
+  center: 'center',
+  right: 'right',
+};
 
 /* ======================= Utils ======================= */
 
@@ -130,20 +153,29 @@ export function deepMerge<T extends object>(base: T, patch?: Partial<T> | null):
 
 const dBlock: Required<ListingCardBlock> = {
   cardBg: '#ffffff',
-  cardRadius: 14,
+  cardRadius: 16,
   cardPx: 0,
   cardPy: 0,
-  shadow: '0 2px 8px rgba(2,6,23,0.07), 0 12px 32px rgba(2,6,23,0.06)',
+  border: '1px solid rgba(0,0,0,.08)',
+  shadow: '0 1px 2px rgba(0,0,0,.06)',
+
   imgAspect: '16 / 9',
   imgCounterBg: 'rgba(0,0,0,.55)',
   imgCounterColor: '#fff',
+  imgCounterFont: 11,
+  imgCounterPx: 6,
+  imgCounterPy: 2,
+  imgCounterPos: 'bl',
+
   titleSize: 16,
   titleWeight: 700,
   titleAlign: 'left',
   titleMb: 0,
+
   addressSize: 12,
   addressWeight: 400,
   addressMt: 4,
+
   priceBg: '#ffb800',
   priceColor: '#111827',
   priceSize: 14,
@@ -152,6 +184,7 @@ const dBlock: Required<ListingCardBlock> = {
   priceMt: 8,
   pricePx: 10,
   pricePy: 6,
+
   chipBg: 'rgba(0,0,0,.65)',
   chipColor: '#fff',
   chipJustify: 'left',
@@ -159,6 +192,7 @@ const dBlock: Required<ListingCardBlock> = {
   chipPx: 10,
   chipPy: 4,
   chipRadius: 999,
+
   metaBg: 'rgba(17,24,39,.06)',
   metaColor: '#111827',
   metaRadius: 10,
@@ -168,6 +202,7 @@ const dBlock: Required<ListingCardBlock> = {
   metaWeight: 500,
   metaJustify: 'left',
   metaMt: 10,
+
   hrShow: 0,
   hrColor: 'rgba(17,24,39,.12)',
   hrThickness: 1,
@@ -175,9 +210,11 @@ const dBlock: Required<ListingCardBlock> = {
   hrMb: 10,
   hrPt: 0,
   hrPb: 0,
+
   avatarShow: 1,
   avatarSize: 28,
   avatarShadow: '0 2px 8px rgba(2,6,23,.08)',
+
   favBg: 'rgba(255,255,255,.9)',
   favColor: '#111827',
   favBgHover: 'rgba(255,255,255,1)',
@@ -242,76 +279,116 @@ export function notifyBrandUpdated(): void {
 function applyBlock(root: HTMLElement, prefix: '--lc-grid' | '--lc-list', b?: Partial<ListingCardBlock>) {
   const v = deepMerge(dBlock, b || {});
 
+  // standardowe mapowanie 1:1
   const mapping: {
-    [K in keyof Required<ListingCardBlock>]: { name: string; unit?: string; transform?: (val: any) => string };
+    [K in keyof Required<ListingCardBlock>]?: { name: string; unit?: string; transform?: (val: any) => string };
   } = {
-    cardBg: { name: 'bg' },
+    // kontener
+    cardBg:     { name: 'bg' },
     cardRadius: { name: 'radius', unit: 'px' },
-    cardPx: { name: 'px', unit: 'px' },
-    cardPy: { name: 'py', unit: 'px' },
-    shadow: { name: 'shadow' },
-    imgAspect: { name: 'img-aspect' },
-    imgCounterBg: { name: 'imgcount-bg' },
-    imgCounterColor: { name: 'imgcount-color' },
-    titleSize: { name: 'title-size', unit: 'px' },
-    titleWeight: { name: 'title-weight' },
+    cardPx:     { name: 'card-px', unit: 'px' },
+    cardPy:     { name: 'card-py', unit: 'px' },
+    border:     { name: 'border' },
+    shadow:     { name: 'shadow' },
+
+    // obraz
+    imgAspect:  { name: 'img-aspect' },
+
+    // tytuł
+    titleSize:  { name: 'title-size', unit: 'px' },
+    titleWeight:{ name: 'title-weight' },
     titleAlign: { name: 'title-align', transform: (val) => TEXT_ALIGN[val] },
-    titleMb: { name: 'title-mb', unit: 'px' },
-    addressSize: { name: 'address-size', unit: 'px' },
-    addressWeight: { name: 'address-weight' },
-    addressMt: { name: 'address-mt', unit: 'px' },
-    priceBg: { name: 'price-bg' },
-    priceColor: { name: 'price-color' },
-    priceSize: { name: 'price-size', unit: 'px' },
+    titleMb:    { name: 'title-mb', unit: 'px' },
+
+    // adres
+    addressSize:  { name: 'address-size', unit: 'px' },
+    addressWeight:{ name: 'address-weight' },
+    addressMt:    { name: 'address-mt', unit: 'px' },
+
+    // cena
+    priceBg:     { name: 'price-bg' },
+    priceColor:  { name: 'price-color' },
+    priceSize:   { name: 'price-size', unit: 'px' },
     priceWeight: { name: 'price-weight' },
-    priceJustify: { name: 'price-justify', transform: (val) => JUSTIFY[val] },
-    priceMt: { name: 'price-mt', unit: 'px' },
-    pricePx: { name: 'price-px', unit: 'px' },
-    pricePy: { name: 'price-py', unit: 'px' },
-    chipBg: { name: 'chip-bg' },
-    chipColor: { name: 'chip-color' },
-    chipJustify: { name: 'chip-justify', transform: (val) => JUSTIFY[val] },
-    chipFont: { name: 'chip-fs', unit: 'px' },
-    chipPx: { name: 'chip-px', unit: 'px' },
-    chipPy: { name: 'chip-py', unit: 'px' },
+    priceJustify:{ name: 'price-justify', transform: (val) => JUSTIFY[val] },
+    priceMt:     { name: 'price-mt', unit: 'px' },
+    pricePx:     { name: 'price-px', unit: 'px' },
+    pricePy:     { name: 'price-py', unit: 'px' },
+
+    // chip
+    chipBg:     { name: 'chip-bg' },
+    chipColor:  { name: 'chip-color' },
+    chipJustify:{ name: 'chip-justify', transform: (val) => JUSTIFY[val] },
+    chipFont:   { name: 'chip-fs', unit: 'px' },
+    chipPx:     { name: 'chip-px', unit: 'px' },
+    chipPy:     { name: 'chip-py', unit: 'px' },
     chipRadius: { name: 'chip-radius', unit: 'px' },
-    metaBg: { name: 'meta-bg' },
-    metaColor: { name: 'meta-color' },
+
+    // meta
+    metaBg:     { name: 'meta-bg' },
+    metaColor:  { name: 'meta-color' },
     metaRadius: { name: 'meta-radius', unit: 'px' },
-    metaPx: { name: 'meta-px', unit: 'px' },
-    metaPy: { name: 'meta-py', unit: 'px' },
-    metaFont: { name: 'meta-fs', unit: 'px' },
+    metaPx:     { name: 'meta-px', unit: 'px' },
+    metaPy:     { name: 'meta-py', unit: 'px' },
+    metaFont:   { name: 'meta-fs', unit: 'px' },
     metaWeight: { name: 'meta-weight' },
-    metaJustify: { name: 'meta-justify', transform: (val) => JUSTIFY[val] },
-    metaMt: { name: 'meta-mt', unit: 'px' },
-    hrShow: { name: 'hr-show' },
-    hrColor: { name: 'hr-color' },
+    metaJustify:{ name: 'meta-justify', transform: (val) => JUSTIFY[val] },
+    metaMt:     { name: 'meta-mt', unit: 'px' },
+
+    // HR
+    hrShow:      { name: 'hr-show' },
+    hrColor:     { name: 'hr-color' },
     hrThickness: { name: 'hr-thickness', unit: 'px' },
-    hrMt: { name: 'hr-mt', unit: 'px' },
-    hrMb: { name: 'hr-mb', unit: 'px' },
-    hrPt: { name: 'hr-pt', unit: 'px' },
-    hrPb: { name: 'hr-pb', unit: 'px' },
-    avatarShow: { name: 'avatar-show' },
-    avatarSize: { name: 'avatar-size', unit: 'px' },
-    avatarShadow: { name: 'avatar-shadow' },
-    favBg: { name: 'fav-bg' },
-    favColor: { name: 'fav-color' },
-    favBgHover: { name: 'fav-bg-hover' },
-    favColorHover: { name: 'fav-color-hover' },
-    favBgActive: { name: 'fav-bg-active' },
+    hrMt:        { name: 'hr-mt', unit: 'px' },
+    hrMb:        { name: 'hr-mb', unit: 'px' },
+    hrPt:        { name: 'hr-pt', unit: 'px' },
+    hrPb:        { name: 'hr-pb', unit: 'px' },
+
+    // avatar
+    avatarShow:  { name: 'avatar-show' },
+    avatarSize:  { name: 'avatar-size', unit: 'px' },
+    avatarShadow:{ name: 'avatar-shadow' },
+
+    // fav
+    favBg:          { name: 'fav-bg' },
+    favColor:       { name: 'fav-color' },
+    favBgHover:     { name: 'fav-bg-hover' },
+    favColorHover:  { name: 'fav-color-hover' },
+    favBgActive:    { name: 'fav-bg-active' },
     favColorActive: { name: 'fav-color-active' },
-    favSize: { name: 'fav-size', unit: 'px' },
-    favRadius: { name: 'fav-radius', unit: 'px' },
-    favShadow: { name: 'fav-shadow' },
+    favSize:        { name: 'fav-size', unit: 'px' },
+    favRadius:      { name: 'fav-radius', unit: 'px' },
+    favShadow:      { name: 'fav-shadow' },
   };
 
   for (const key in mapping) {
     const k = key as keyof Required<ListingCardBlock>;
-    const config = mapping[k];
+    const config = mapping[k]!;
     const value = (v as any)[k];
-    const finalValue = config.transform ? config.transform(value) : `${value}${config.unit || ''}`;
+    const finalValue = config.transform
+      ? config.transform(value)
+      : `${value}${config.unit || ''}`;
     setVar(root, `${prefix}-${config.name}`, finalValue);
   }
+
+  // Licznik zdjęć – dodatkowe zmienne (rozmiar, padding, pozycja)
+  setVar(root, `${prefix}-imgcount-fs`, `${v.imgCounterFont}px`);
+  setVar(root, `${prefix}-imgcount-px`, `${v.imgCounterPx}px`);
+  setVar(root, `${prefix}-imgcount-py`, `${v.imgCounterPy}px`);
+  // >>> DODAJ TE DWIE LINIE <<<
+  setVar(root, `${prefix}-imgcount-bg`, v.imgCounterBg);
+  setVar(root, `${prefix}-imgcount-color`, v.imgCounterColor);
+
+  // Pozycja licznika -> 4 zmienne top/right/bottom/left
+  const pos = String(v.imgCounterPos || 'bl').toLowerCase() as Corner;
+  const isTL = pos === 'tl';
+  const isTR = pos === 'tr';
+  const isBL = pos === 'bl';
+  const isBR = pos === 'br';
+  setVar(root, `${prefix}-imgcount-top`,    isTL || isTR ? '8px' : 'auto');
+  setVar(root, `${prefix}-imgcount-right`,  isTR || isBR ? '8px' : 'auto');
+  setVar(root, `${prefix}-imgcount-bottom`, isBL || isBR ? '8px' : 'auto');
+  setVar(root, `${prefix}-imgcount-left`,   isTL || isBL ? '8px' : 'auto');
 }
 
 export function normalizeBrand(input?: Partial<BrandPayload> | null): BrandPayload {
@@ -326,12 +403,11 @@ export function applyBrandToElement(el: HTMLElement, brand?: Partial<BrandPayloa
   if (!el) return;
   const b = normalizeBrand(brand);
 
-  // Kolory globalne
+  // Kolory globalne + radius
   setVar(el, '--brand-primary', b.primary_color);
   setVar(el, '--brand-secondary', b.secondary_color);
-  // Kompatybilność: obsłuż obie nazwy zmiennej tła
   setVar(el, '--brand-page-bg', b.page_bg);
-  setVar(el, '--brand-bg', b.page_bg);
+  setVar(el, '--brand-bg', b.page_bg); // kompat
   setVar(el, '--brand-header-bg', b.header_bg);
   setVar(el, '--brand-text', b.text_color);
   setVar(el, '--brand-button-radius', `${b.button_radius ?? 14}px`);

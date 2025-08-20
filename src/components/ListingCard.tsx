@@ -19,7 +19,7 @@ export default function ListingCard({
   offerType,
   ownerAvatarUrl,
   ownerProfileHref,
-  ownerId,               // <-- UŻYWAMY TEGO
+  ownerId,
   view = 'grid',
 }: {
   id: number | string;
@@ -33,7 +33,7 @@ export default function ListingCard({
   ownerAvatarUrl?: string | null;
   ownerProfileHref?: string;
   view?: View;
-  ownerId?: number | string;   // <-- już było w typie, teraz realnie wykorzystywane
+  ownerId?: number | string;
 }) {
   const href = `/ogloszenia/${id}`;
   const P = view === 'grid' ? '--lc-grid' : '--lc-list';
@@ -42,27 +42,18 @@ export default function ListingCard({
 
   const pricePerM2 = calcPricePerM2(price, area);
 
-  // === NOWE: fallback do avatara zalogowanego usera, jeśli to jego ogłoszenie ===
   const { user } = useAuth();
   const resolvedOwnerAvatar = React.useMemo(() => {
-    // 1) jeśli przyszło coś z serwera – normalizujemy i zwracamy
     const fromProps = absolutize(ownerAvatarUrl || '');
     if (fromProps) return fromProps;
 
-    // 2) jeśli listing należy do zalogowanego usera – użyj jego zdjęcia z AuthContext
     const uid = ownerId != null ? String(ownerId) : '';
     const ctxId = (user?.id != null) ? String(user.id) : '';
     if (uid && ctxId && uid === ctxId) {
-      const ctxRaw =
-        (user as any)?.avatar_url ||
-        (user as any)?.avatar ||
-        (user as any)?.photo_url ||
-        '';
-      const fromCtx = absolutize(ctxRaw);
+      const raw = (user as any)?.avatar_url || (user as any)?.avatar || (user as any)?.photo_url || '';
+      const fromCtx = absolutize(raw);
       if (fromCtx) return fromCtx;
     }
-
-    // 3) brak danych – zostaw pusty, poniżej pójdzie default
     return '';
   }, [ownerAvatarUrl, ownerId, user]);
 
@@ -70,18 +61,21 @@ export default function ListingCard({
 
   return (
     <article
-      className={
-        view === 'grid'
-          ? 'listing-card group relative overflow-hidden rounded-2xl border bg-white shadow-sm transition'
-          : 'listing-card group grid gap-0 overflow-hidden rounded-2xl border bg-white shadow-sm transition'
-      }
+      className="listing-card group overflow-hidden transition"
       data-view={view}
-      style={view === 'list' ? { gridTemplateColumns: `200px 1fr` } : undefined}
+      style={{
+        ...(view === 'list' ? { display: 'grid', gridTemplateColumns: '200px 1fr' } : null),
+        border: `var(${P}-border)`,
+        boxShadow: `var(${P}-shadow)`,
+        borderRadius: `var(${P}-radius)`,
+        background: `var(${P}-bg)`,
+        padding: `calc(var(${P}-card-py, 0px)) calc(var(${P}-card-px, 0px))`,
+      }}
     >
       {/* OBRAZ */}
       <Link
         href={href}
-        className="relative block overflow-hidden"
+        className="relative block overflow-hidden rounded-[inherit]"
         style={{ aspectRatio: `var(${P}-img-aspect)` as any }}
         aria-label={title}
       >
@@ -105,12 +99,17 @@ export default function ListingCard({
 
         {/* LICZNIK ZDJĘĆ */}
         <div
-          className="absolute inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px]"
+          className="absolute inline-flex items-center gap-1 rounded-md"
           style={{
             background: `var(${P}-imgcount-bg)`,
             color: `var(${P}-imgcount-color)`,
-            bottom: '8px',
-            left: '8px',
+            fontSize: `var(${P}-imgcount-fs)`,
+            padding: `var(${P}-imgcount-py) var(${P}-imgcount-px)`,
+            top: `var(${P}-imgcount-top)`,
+            right: `var(${P}-imgcount-right)`,
+            bottom: `var(${P}-imgcount-bottom)`,
+            left: `var(${P}-imgcount-left)`,
+            borderRadius: 999,
           }}
         >
           <Camera className="h-[14px] w-[14px]" />
@@ -140,7 +139,7 @@ export default function ListingCard({
 
       {/* TREŚĆ */}
       <div
-        className="p-3 listing-card__body"
+        className="p-3"
         style={{
           background: `var(${P}-bg)`,
           boxShadow: `var(${P}-shadow)`,
@@ -235,7 +234,7 @@ export default function ListingCard({
                   fontSize: `var(${P}-meta-fs)`,
                   fontWeight: `var(${P}-meta-weight)` as any,
                   padding: `var(${P}-meta-py) var(${P}-meta-px)`,
-                  borderRadius: `var(${P}-meta-radius)`,
+                  borderRadius: `var(${P}-meta-radius)`, /* ← tu była literówka */
                 }}
               >
                 {pricePerM2} zł/m²
@@ -243,7 +242,6 @@ export default function ListingCard({
             ) : null}
           </div>
 
-          {/* AVATAR */}
           {renderAvatar({ P, src: finalAvatarSrc, ownerProfileHref })}
         </div>
       </div>
@@ -261,7 +259,7 @@ export default function ListingCard({
         .brand-fav-btn[data-scope="list"]:active{
           background: var(--lc-list-fav-bg-active); color: var(--lc-list-fav-color-active);
         }
-        .listing-card{ transition: transform 220ms ease, box-shadow 220ms ease; will-change: transform; }
+        .listing-card{ will-change: transform; }
         .listing-card:hover{ transform: translateY(-3px); }
       `}</style>
     </article>
@@ -269,55 +267,30 @@ export default function ListingCard({
 }
 
 /* ===== helpers ===== */
-
-function renderAvatar({
-  P,
-  src,
-  ownerProfileHref,
-}: {
-  P: string;
-  src: string;
-  ownerProfileHref?: string;
-}) {
+function renderAvatar({ P, src, ownerProfileHref }: { P: string; src: string; ownerProfileHref?: string; }) {
   const DEFAULT_AVATAR = '/avatars/default.jpg';
-
   const imgEl = (
     <img
       src={src || DEFAULT_AVATAR}
-      onError={(e) => {
-        (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR;
-      }}
+      onError={(e) => { (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR; }}
       alt=""
       className="h-full w-full object-cover"
     />
   );
-
   const commonStyle: React.CSSProperties = {
     width: `var(${P}-avatar-size, 28px)`,
     height: `var(${P}-avatar-size, 28px)`,
     boxShadow: `var(${P}-avatar-shadow, 0 2px 8px rgba(2,6,23,.08))`,
     opacity: `var(${P}-avatar-show, 1)`,
   };
-
   if (ownerProfileHref) {
     return (
-      <Link
-        href={ownerProfileHref}
-        className="shrink-0 overflow-hidden rounded-full ring-1 ring-black/5 cursor-pointer"
-        style={commonStyle}
-        aria-label="Profil właściciela"
-        title="Zobacz profil"
-      >
+      <Link href={ownerProfileHref} className="shrink-0 overflow-hidden rounded-full ring-1 ring-black/5 cursor-pointer" style={commonStyle} aria-label="Profil właściciela" title="Zobacz profil">
         {imgEl}
       </Link>
     );
   }
-
-  return (
-    <div className="shrink-0 overflow-hidden rounded-full ring-1 ring-black/5" style={commonStyle} title="Avatar">
-      {imgEl}
-    </div>
-  );
+  return <div className="shrink-0 overflow-hidden rounded-full ring-1 ring-black/5" style={commonStyle} title="Avatar">{imgEl}</div>;
 }
 
 function formatPrice(p?: number | string) {
@@ -326,7 +299,6 @@ function formatPrice(p?: number | string) {
   if (!Number.isFinite(n)) return String(p);
   return n.toLocaleString('pl-PL') + ' zł';
 }
-
 function calcPricePerM2(price?: number | string, area?: number | string) {
   const nPrice = typeof price === 'number' ? price : Number(price);
   const nArea = typeof area === 'number' ? area : Number(area);
@@ -334,17 +306,13 @@ function calcPricePerM2(price?: number | string, area?: number | string) {
   const val = Math.round(nPrice / nArea);
   return val.toLocaleString('pl-PL');
 }
-
 function apiBase() {
   return (process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
 }
-
 function absolutize(path: string) {
   if (!path) return '';
   if (/^(data:|blob:|https?:\/\/)/i.test(path)) return path;
-  // usuń wiodące slashe
   let p = path.replace(/^\/+/, '');
-  // avatars/... -> storage/avatars/...
   if (p.startsWith('avatars/')) p = `storage/${p}`;
   return `${apiBase()}/${p}`;
 }
